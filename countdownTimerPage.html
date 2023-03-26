@@ -45,10 +45,11 @@
   <div class="container">
     <div class="row">
       <div class="col-6">
-        <h2>残り時間カウンター</label>
+        <h2>残り時間カウンター</h2>
+        <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#settingsModal">設定を編集</button>
       </div>
       <div class="col-6">
-        <h2 class="text-end" id="datetimenow"></label>
+        <h2 class="text-end" id="datetimenow"></h2>
       </div>
     </div>
     <div class="row">
@@ -57,6 +58,28 @@
       </div>
     </div>
   </div>
+
+  <div class="modal fade" id="settingsModal" tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="settingsModalLabel">設定を編集</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="settingsTextarea" class="form-label">設定JSON</label>
+            <textarea class="form-control" id="settingsTextarea" rows="8"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="button" class="btn btn-primary" id="saveSettings">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 
   <script>
     $(document).ready(function() {
@@ -136,26 +159,82 @@
     }
   }
 
-function showTime() {
-  const date = new Date(); //現在時刻を取得
-  const y = date.getFullYear(), //西暦年
-    m = date.getMonth() + 1, //月
-    d = date.getDate(), //日
-    H = date.getHours(), //時
-    M = date.getMinutes(), //分
-    S = date.getSeconds(); //秒
-  const yStr = y.toString().padStart(4, '0'), //西暦年を4桁の文字列に変換
-    mStr = m.toString().padStart(2, '0'), //月を2桁の文字列に変換
-    dStr = d.toString().padStart(2, '0'), //日を2桁の文字列に変換
-    HStr = H.toString().padStart(2, '0'), //時を2桁の文字列に変換
-    MStr = M.toString().padStart(2, '0'), //分を2桁の文字列に変換
-    SStr = S.toString().padStart(2, '0'); //秒を2桁の文字列に変換
-  const timeString = `${yStr}/${mStr}/${dStr} ${HStr}:${MStr}:${SStr}`; //時計として表示する文字列を作成
-  $("#datetimenow").text(timeString);
-}
+  function showTime() {
+    const date = new Date(); //現在時刻を取得
+    const y = date.getFullYear(), //西暦年
+      m = date.getMonth() + 1, //月
+      d = date.getDate(), //日
+      H = date.getHours(), //時
+      M = date.getMinutes(), //分
+      S = date.getSeconds(); //秒
+    const yStr = y.toString().padStart(4, '0'), //西暦年を4桁の文字列に変換
+      mStr = m.toString().padStart(2, '0'), //月を2桁の文字列に変換
+      dStr = d.toString().padStart(2, '0'), //日を2桁の文字列に変換
+      HStr = H.toString().padStart(2, '0'), //時を2桁の文字列に変換
+      MStr = M.toString().padStart(2, '0'), //分を2桁の文字列に変換
+      SStr = S.toString().padStart(2, '0'); //秒を2桁の文字列に変換
+    const timeString = `${yStr}/${mStr}/${dStr} ${HStr}:${MStr}:${SStr}`; //時計として表示する文字列を作成
+    $("#datetimenow").text(timeString);
+  }
 
   updateTimer();
-});
+
+
+      function saveSettingsToCookie(settings) {
+        const expirationDate = new Date();
+        expirationDate.setFullYear(expirationDate.getFullYear() + 1);
+        document.cookie = `timerList=${encodeURIComponent(JSON.stringify(settings))}; expires=${expirationDate.toUTCString()}; path=/`;
+      }
+
+      function loadSettingsFromCookie() {
+        const cookieMatch = document.cookie.match(/timerList=([^;]+)/);
+        if (cookieMatch) {
+          try {
+            return JSON.parse(decodeURIComponent(cookieMatch[1]));
+          } catch (e) {
+            console.error('Failed to load settings from cookie:', e);
+          }
+        }
+        return null;
+      }
+
+      $('#settingsModal').on('show.bs.modal', function () {
+        $('#settingsTextarea').val(JSON.stringify(timerList, null, 2));
+      });
+
+      $('#saveSettings').on('click', function () {
+        try {
+          const newTimerList = JSON.parse($('#settingsTextarea').val());
+          timerList.length = 0;
+          Array.prototype.push.apply(timerList, newTimerList);
+          saveSettingsToCookie(timerList);
+          $('#settingsModal').modal('hide');
+          initializeTimers();
+          updateTimer();
+        } catch (e) {
+          alert('設定の読み込みに失敗しました。JSONの書式を確認してください。');
+          console.error('Failed to load new settings:', e);
+        }
+      });
+
+      function initializeTimers() {
+        $("#timers").empty();
+        timerList.forEach(function (timer) {
+          $("#timers").append(`
+        <h2 class="fs-5 text-muted">${timer.title} <span class="time-config">${timer.targetTime}</span></h2>
+        <p class="fs-1 fw-bold timer-value" id="${timer.title}"></p>
+        <br/>
+      `);
+        });
+      }
+
+      initializeTimers();
+      updateTimer();
+    });
+
+
+
+
 </script>
   <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
