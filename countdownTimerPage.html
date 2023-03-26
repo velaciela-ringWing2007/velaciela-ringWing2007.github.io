@@ -51,14 +51,16 @@
 <body>
 <div class="container">
     <div class="row">
-        <div class="col-6">
-            <h2>残り時間カウンター</h2>
-            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#settingsModal">
-                設定を編集
-            </button>
+        <div class="col-5">
+            <h2>残り時間</h2>
         </div>
         <div class="col-6">
-            <h2 class="text-end" id="datetimenow"></h2>
+            <h3 class="text-end" id="datetimenow"></h3>
+        </div>
+        <div class="col-1">
+            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#settingsModal">
+                設定
+            </button>
         </div>
     </div>
     <div class="row">
@@ -66,6 +68,7 @@
             <div class="timer-container bg-white border rounded p-4 shadow" id="timers"></div>
         </div>
     </div>
+
 </div>
 
 <div class="modal fade" id="settingsModal" tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true">
@@ -77,7 +80,9 @@
             </div>
             <div class="modal-body">
                 <div class="mb-3">
-                    <label for="settingsTextarea" class="form-label">設定JSON</label>
+                    <p>こんな感じでJSONで設定書いて保存するとクッキーに登録される（空にして登録するとデフォルト復活）</p>
+                    <p>{title: "起床時刻", targetTime: "08:20:00"}</p>
+                    <p>{title: "2023年残り", targetTime: "2024-01-01T00:00:00"}</p>
                     <textarea class="form-control" id="settingsTextarea" rows="8"></textarea>
                 </div>
             </div>
@@ -92,7 +97,8 @@
 
 <script>
     $(document).ready(function () {
-        const timerList = [
+        const defaultTimerList = [
+            // 既定のタイマー設定をここに記述
             {title: "起床時刻", targetTime: "08:20:00"},
             {title: "勤務開始時刻", targetTime: "09:00:00"},
             {title: "定時まで", targetTime: "18:00:00"},
@@ -100,13 +106,7 @@
             {title: "2023年残り", targetTime: "2024-01-01T00:00:00"},
         ];
 
-        timerList.forEach(function (timer) {
-            $("#timers").append(`
-          <h2 class="fs-5 text-muted">${timer.title} <span class="time-config">${timer.targetTime}</span></h2>
-          <p class="fs-1 fw-bold timer-value" id="${timer.title}"></p>
-          <br/>
-        `);
-        });
+        let timerList = [];
 
         function calculateRemainingTime(targetTime) {
             const now = new Date();
@@ -186,26 +186,24 @@
             $("#datetimenow").text(timeString);
         }
 
-        updateTimer();
-
-
         function saveSettingsToCookie(settings) {
             const expirationDate = new Date();
             expirationDate.setFullYear(expirationDate.getFullYear() + 1);
-            document.cookie = `timerList=${encodeURIComponent(JSON.stringify(settings))}; expires=${expirationDate.toUTCString()}; path=/`;
+            document.cookie = `timerList=${encodeURIComponent(JSON.stringify(settings))}; expires=${expirationDate.toUTCString()}; path=/; SameSite=Lax; Secure`;
         }
 
         function loadSettingsFromCookie() {
-            const cookieMatch = document.cookie.match(/timerList=([^;]+)/);
-            if (cookieMatch) {
+            const cookieValue = document.cookie.replace(/(?:(?:^|.*;\s*)timerList\s*\=\s*([^;]*).*$)|^.*$/, '$1');
+            if (cookieValue) {
                 try {
-                    return JSON.parse(decodeURIComponent(cookieMatch[1]));
+                    return JSON.parse(decodeURIComponent(cookieValue));
                 } catch (e) {
-                    console.error('Failed to load settings from cookie:', e);
+                    console.error('Failed to parse settings from cookie:', e);
                 }
             }
             return null;
         }
+
 
         $('#settingsModal').on('show.bs.modal', function () {
             $('#settingsTextarea').val(JSON.stringify(timerList, null, 2));
@@ -213,7 +211,8 @@
 
         $('#saveSettings').on('click', function () {
             try {
-                const newTimerList = JSON.parse($('#settingsTextarea').val());
+                let settingsTextAreasString = $("#settingsTextarea").val();
+                const newTimerList = JSON.parse(settingsTextAreasString == "" ? JSON.stringify(defaultTimerList) : settingsTextAreasString);
                 timerList.length = 0;
                 Array.prototype.push.apply(timerList, newTimerList);
                 saveSettingsToCookie(timerList);
@@ -227,20 +226,21 @@
         });
 
         function initializeTimers() {
+            timerList = loadSettingsFromCookie() || defaultTimerList;
+
             $("#timers").empty();
             timerList.forEach(function (timer) {
                 $("#timers").append(`
-        <h2 class="fs-5 text-muted">${timer.title} <span class="time-config">${timer.targetTime}</span></h2>
-        <p class="fs-1 fw-bold timer-value" id="${timer.title}"></p>
-        <br/>
-      `);
+                <h2 class="fs-5 text-muted">${timer.title} <span class="time-config">${timer.targetTime}</span></h2>
+                <p class="fs-1 fw-bold timer-value" id="${timer.title}"></p>
+                <br/>
+              `);
             });
         }
 
         initializeTimers();
         updateTimer();
     });
-
 
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"
