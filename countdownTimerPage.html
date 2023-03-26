@@ -233,6 +233,7 @@
 
         function initializeTimers() {
             timerList = loadSettingsFromCookie() || defaultTimerList;
+            saveSettingsToCookie(timerList); // 起動時にクッキーに保存して有効期間を伸ばす
 
             $("#timers").empty();
             timerList.forEach(function (timer) {
