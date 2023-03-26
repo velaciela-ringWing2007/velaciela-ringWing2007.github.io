@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>カウントダウンタイマー</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <style>
+    body {
+      background-color: #f0f0f0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+
+    .timer-container {
+      text-align: center;
+    }
+
+    .time-config {
+      font-size: 0.8rem;
+      font-weight: normal;
+      color: #999;
+    }
+
+    .expired-time {
+      color: red;
+    }
+
+    .timer-value {
+      font-family: monospace;
+    }
+
+    @keyframes blink {
+      25% { opacity: 1; }
+      50% { opacity: 0; }
+      100% { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="row">
+      <div class="col-6">
+        <h2>残り時間カウンター</label>
+      </div>
+      <div class="col-6">
+        <h2 class="text-end" id="datetimenow"></label>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-12">
+        <div class="timer-container bg-white border rounded p-4 shadow" id="timers"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    $(document).ready(function() {
+      const timerList = [
+        { title: "起床時刻", targetTime: "08:20:00" },
+        { title: "勤務開始時刻", targetTime: "09:00:00" },
+        { title: "定時まで", targetTime: "18:00:00" },
+        { title: "就寝時間まで", targetTime: "02:20:00" },
+        { title: "2023年残り", targetTime: "2024-01-01T00:00:00" },
+      ];
+
+      timerList.forEach(function(timer) {
+        $("#timers").append(`
+          <h2 class="fs-5 text-muted">${timer.title} <span class="time-config">${timer.targetTime}</span></h2>
+          <p class="fs-1 fw-bold timer-value" id="${timer.title}"></p>
+          <br/>
+        `);
+      });
+
+      function calculateRemainingTime(targetTime) {
+        const now = new Date();
+        let target;
+        if (targetTime.includes("T")) {
+          target = new Date(targetTime);
+        } else {
+          target = new Date(now.toDateString() + " " + targetTime);
+          if (now > target) {
+            target.setDate(target.getDate() + 1);
+          }
+       
+        }
+    return Math.floor((target - now) / 1000);
+  }
+
+  function formatTime(seconds, isNegative = false, displayDays = true) {
+    const days = Math.floor(Math.abs(seconds) / 86400);
+    const hours = Math.floor((Math.abs(seconds % 86400) / 3600));
+    const minutes = Math.floor((Math.abs(seconds) % 3600) / 60);
+    const remainingSeconds = Math.abs(seconds) % 60;
+    const dayString = displayDays ? `${days}日` : "";
+    return `${isNegative ? '-' : ''}${dayString}${String(hours).padStart(2, '0')}時間${String(minutes).padStart(2, '0')}分${String(remainingSeconds).padStart(2, '0')}秒`; 
+  }
+
+  function updateTextColor(element, remainingSeconds) {
+    if (remainingSeconds < 15 * 60) {
+      element.css({ "color": "red", "animation": "blink 1s linear infinite" });
+    } else if (remainingSeconds < 30 * 60) {
+      element.css({ "color": "red", "animation": "" });
+    } else if (remainingSeconds < 60 * 60) {
+      element.css({ "color": "orange", "animation": "" });
+    } else {
+      element.css({ "color": "blue", "animation": "" });
+    }
+  }
+
+  function updateTimer() {
+    let allTimersFinished = true;
+
+    timerList.forEach(function(timer) {
+      const remainingSeconds = calculateRemainingTime(timer.targetTime);
+      const displayDays = timer.targetTime.includes("T");
+      const element = $("#" + timer.title);
+      updateTextColor(element, remainingSeconds);
+
+      if (remainingSeconds > 0) {
+        allTimersFinished = false;
+        element.removeClass("expired-time").text(formatTime(remainingSeconds, false, displayDays));
+      } else {
+        element.addClass("expired-time").text(formatTime(remainingSeconds, true, displayDays));
+      }
+    });
+
+    showTime();
+
+    if (!allTimersFinished) {
+      setTimeout(updateTimer, 1000);
+    }
+  }
+
+function showTime() {
+  const date = new Date(); //現在時刻を取得
+  const y = date.getFullYear(), //西暦年
+    m = date.getMonth() + 1, //月
+    d = date.getDate(), //日
+    H = date.getHours(), //時
+    M = date.getMinutes(), //分
+    S = date.getSeconds(); //秒
+  const yStr = y.toString().padStart(4, '0'), //西暦年を4桁の文字列に変換
+    mStr = m.toString().padStart(2, '0'), //月を2桁の文字列に変換
+    dStr = d.toString().padStart(2, '0'), //日を2桁の文字列に変換
+    HStr = H.toString().padStart(2, '0'), //時を2桁の文字列に変換
+    MStr = M.toString().padStart(2, '0'), //分を2桁の文字列に変換
+    SStr = S.toString().padStart(2, '0'); //秒を2桁の文字列に変換
+  const timeString = `${yStr}/${mStr}/${dStr} ${HStr}:${MStr}:${SStr}`; //時計として表示する文字列を作成
+  $("#datetimenow").text(timeString);
+}
+
+  updateTimer();
+});
+</script>
+  <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
+</body>
+</html>
