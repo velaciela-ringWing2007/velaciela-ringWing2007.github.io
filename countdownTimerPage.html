@@ -8,14 +8,6 @@
           crossorigin="anonymous">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
-        /*body {*/
-        /*    background-color: #f0f0f0;*/
-        /*    display: flex;*/
-        /*    justify-content: center;*/
-        /*    align-items: center;*/
-        /*    height: 100vh;*/
-        /*    margin: 0;*/
-        /*}*/
         body {
             margin: 30px 10px;
         }
@@ -95,7 +87,7 @@
             </div>
             <div class="modal-body">
                 <div class="mb-3">
-                    <p>こんな感じでJSONで設定書いて保存するとクッキーに登録される（空にして登録するとデフォルト復活）</p>
+                    <p>こんな感じでJSONで設定書いて保存するとクッキーに登録される（空にして登録するとデフォルト復活）<br>※タイトルに半角スペース入れると壊れます</p>
                     <p>{title: "起床時刻", targetTime: "08:20:00"}</p>
                     <p>{title: "2023年残り", targetTime: "2024-01-01T00:00:00"}</p>
                     <textarea class="form-control" id="settingsTextarea" rows="8"></textarea>
