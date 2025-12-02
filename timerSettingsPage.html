@@ -77,11 +77,52 @@
         </div>
     </div>
 
+    <!-- グループ選択 -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">グループ管理</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row align-items-end">
+                        <div class="col-md-4 mb-2 mb-md-0">
+                            <label for="groupSelect" class="form-label">現在のグループ</label>
+                            <select class="form-select" id="groupSelect"></select>
+                        </div>
+                        <div class="col-auto">
+                            <button type="button" class="btn btn-success" id="addGroupBtn" title="グループを追加">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-lg" viewBox="0 0 16 16">
+                                    <path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="col-auto">
+                            <button type="button" class="btn btn-outline-primary" id="renameGroupBtn" title="グループ名を変更">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-pencil" viewBox="0 0 16 16">
+                                    <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="col-auto">
+                            <button type="button" class="btn btn-outline-danger" id="deleteGroupBtn" title="グループを削除">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+                                    <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                                    <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- タイマー一覧 -->
     <div class="row mb-4">
         <div class="col">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h4>タイマー一覧</h4>
+                <h4>タイマー一覧 <small class="text-muted" id="currentGroupName"></small></h4>
                 <button type="button" class="btn btn-success" id="addTimerBtn">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-lg" viewBox="0 0 16 16">
                         <path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2"/>
@@ -313,13 +354,23 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
 <script>
 $(document).ready(function() {
-    const defaultTimerList = [
-        {title: "起床時刻", targetTime: "07:00:00"},
-        {title: "勤務開始時刻", targetTime: "09:00:00"},
-        {title: "定時まで", targetTime: "18:00:00"},
-        {title: "就寝時間まで", targetTime: "24:00:00"},
-    ];
+    // デフォルトの設定データ（新構造）
+    const defaultSettings = {
+        active: 0,
+        groups: [
+            {
+                name: "仕事用",
+                timers: [
+                    {title: "起床時刻", targetTime: "07:00:00"},
+                    {title: "勤務開始時刻", targetTime: "09:00:00"},
+                    {title: "定時まで", targetTime: "18:00:00"},
+                    {title: "就寝時間まで", targetTime: "24:00:00"},
+                ]
+            }
+        ]
+    };
 
+    let settings = null;
     let timerList = [];
     let editingIndex = -1;
     let timerModal;
@@ -327,17 +378,76 @@ $(document).ready(function() {
     // 初期化
     function init() {
         timerModal = new bootstrap.Modal(document.getElementById('timerModal'));
-        timerList = loadSettingsFromCookie() || [...defaultTimerList];
+        const rawData = loadSettingsFromCookie();
+        settings = rawData ? migrateOldFormat(rawData) : JSON.parse(JSON.stringify(defaultSettings));
+
+        // activeが範囲外の場合は0にリセット
+        if (settings.active < 0 || settings.active >= settings.groups.length) {
+            settings.active = 0;
+        }
+
+        renderGroupSelect();
+        loadCurrentGroup();
         renderTimerList();
         updateJsonTextarea();
         setupEventListeners();
     }
 
+    // targetTimeのフォーマットを検証・修正
+    function validateTargetTime(targetTime) {
+        if (typeof targetTime !== 'string') return null;
+
+        // 特定日時 (2024-01-01T00:00:00)
+        if (targetTime.includes('T')) return targetTime;
+        // 毎週 (W135-09:00:00)
+        if (targetTime.startsWith('W')) return targetTime;
+        // 毎月 (D25-00:00:00)
+        if (targetTime.startsWith('D')) return targetTime;
+
+        // 毎日 (HH:MM:SS) - コロンが2つ以外は不正
+        const parts = targetTime.split(':');
+        if (parts.length === 3) {
+            return targetTime; // 正常
+        } else if (parts.length === 4) {
+            // "21:00:00:00" のような誤りを "21:00:00" に修正
+            return parts.slice(0, 3).join(':');
+        }
+        return null; // 不正な形式
+    }
+
+    // 旧形式（配列）から新形式への変換
+    function migrateOldFormat(data) {
+        if (Array.isArray(data)) {
+            // 旧形式: 配列の場合は新形式に変換
+            // 有効なタイマーのみをフィルタリング＆修正
+            const validTimers = data
+                .filter(t => t && typeof t.title === 'string' && typeof t.targetTime === 'string')
+                .map(t => ({
+                    title: t.title,
+                    targetTime: validateTargetTime(t.targetTime)
+                }))
+                .filter(t => t.targetTime !== null);
+
+            const migrated = {
+                active: 0,
+                groups: [
+                    { name: "Timer1", timers: validTimers }
+                ]
+            };
+            // マイグレーション後は即座に保存して次回から新形式で読み込まれるようにする
+            saveSettingsToCookie(migrated);
+            console.log('Timer settings migrated from old format to new format', migrated);
+            return migrated;
+        }
+        // 新形式: そのまま返す
+        return data;
+    }
+
     // Cookie操作
-    function saveSettingsToCookie(settings) {
+    function saveSettingsToCookie(data) {
         const expirationDate = new Date();
         expirationDate.setFullYear(expirationDate.getFullYear() + 1);
-        document.cookie = `timerList=${encodeURIComponent(JSON.stringify(settings))}; expires=${expirationDate.toUTCString()}; path=/; SameSite=Lax; Secure`;
+        document.cookie = `timerList=${encodeURIComponent(JSON.stringify(data))}; expires=${expirationDate.toUTCString()}; path=/; SameSite=Lax; Secure`;
     }
 
     function loadSettingsFromCookie() {
@@ -350,6 +460,28 @@ $(document).ready(function() {
             }
         }
         return null;
+    }
+
+    // グループ関連
+    function renderGroupSelect() {
+        const $select = $('#groupSelect');
+        $select.empty();
+        settings.groups.forEach((group, index) => {
+            $select.append(`<option value="${index}">${escapeHtml(group.name)}</option>`);
+        });
+        $select.val(settings.active);
+    }
+
+    function loadCurrentGroup() {
+        const activeGroup = settings.groups[settings.active];
+        timerList = activeGroup ? activeGroup.timers : [];
+        $('#currentGroupName').text(`- ${activeGroup ? activeGroup.name : ''}`);
+    }
+
+    function saveCurrentGroup() {
+        if (settings.groups[settings.active]) {
+            settings.groups[settings.active].timers = timerList;
+        }
     }
 
     // タイマーリスト描画
@@ -455,6 +587,57 @@ $(document).ready(function() {
 
     // イベントリスナー設定
     function setupEventListeners() {
+        // グループ切り替え
+        $('#groupSelect').on('change', function() {
+            saveCurrentGroup(); // 現在のグループを保存
+            settings.active = parseInt($(this).val());
+            loadCurrentGroup();
+            renderTimerList();
+            updateJsonTextarea();
+        });
+
+        // グループ追加
+        $('#addGroupBtn').on('click', function() {
+            const name = prompt('新しいグループ名を入力してください:');
+            if (name && name.trim()) {
+                saveCurrentGroup();
+                settings.groups.push({ name: name.trim(), timers: [] });
+                settings.active = settings.groups.length - 1;
+                renderGroupSelect();
+                loadCurrentGroup();
+                renderTimerList();
+                updateJsonTextarea();
+            }
+        });
+
+        // グループ名変更
+        $('#renameGroupBtn').on('click', function() {
+            const currentName = settings.groups[settings.active].name;
+            const newName = prompt('新しいグループ名を入力してください:', currentName);
+            if (newName && newName.trim()) {
+                settings.groups[settings.active].name = newName.trim();
+                renderGroupSelect();
+                loadCurrentGroup();
+            }
+        });
+
+        // グループ削除
+        $('#deleteGroupBtn').on('click', function() {
+            if (settings.groups.length <= 1) {
+                alert('最後のグループは削除できません');
+                return;
+            }
+            const groupName = settings.groups[settings.active].name;
+            if (confirm(`グループ「${groupName}」を削除しますか？\nこの操作は取り消せません。`)) {
+                settings.groups.splice(settings.active, 1);
+                settings.active = Math.min(settings.active, settings.groups.length - 1);
+                renderGroupSelect();
+                loadCurrentGroup();
+                renderTimerList();
+                updateJsonTextarea();
+            }
+        });
+
         // タイマー追加
         $('#addTimerBtn').on('click', function() {
             editingIndex = -1;
@@ -497,14 +680,17 @@ $(document).ready(function() {
 
         // 全体保存
         $('#saveBtn').on('click', function() {
-            saveSettingsToCookie(timerList);
+            saveCurrentGroup();
+            saveSettingsToCookie(settings);
             alert('設定を保存しました！');
         });
 
         // デフォルトに戻す
         $('#resetBtn').on('click', function() {
-            if (confirm('設定をデフォルトに戻しますか？')) {
-                timerList = [...defaultTimerList];
+            if (confirm('全てのグループをデフォルトに戻しますか？')) {
+                settings = JSON.parse(JSON.stringify(defaultSettings));
+                renderGroupSelect();
+                loadCurrentGroup();
                 renderTimerList();
                 updateJsonTextarea();
             }
@@ -513,7 +699,18 @@ $(document).ready(function() {
         // JSON適用
         $('#applyJsonBtn').on('click', function() {
             try {
-                timerList = JSON.parse($('#jsonTextarea').val());
+                const parsed = JSON.parse($('#jsonTextarea').val());
+                // 新形式か旧形式かを判定
+                if (parsed.groups && Array.isArray(parsed.groups)) {
+                    settings = parsed;
+                    if (settings.active < 0 || settings.active >= settings.groups.length) {
+                        settings.active = 0;
+                    }
+                    renderGroupSelect();
+                    loadCurrentGroup();
+                } else if (Array.isArray(parsed)) {
+                    timerList = parsed;
+                }
                 renderTimerList();
                 alert('JSONを適用しました');
             } catch (e) {
@@ -522,7 +719,10 @@ $(document).ready(function() {
         });
 
         // JSON更新
-        $('#refreshJsonBtn').on('click', updateJsonTextarea);
+        $('#refreshJsonBtn').on('click', function() {
+            saveCurrentGroup();
+            updateJsonTextarea();
+        });
 
         // エクスポート
         $('#exportBtn').on('click', exportSettings);
@@ -564,7 +764,8 @@ $(document).ready(function() {
 
     // エクスポート機能
     function exportSettings() {
-        const dataStr = JSON.stringify(timerList, null, 2);
+        saveCurrentGroup();
+        const dataStr = JSON.stringify(settings, null, 2);
         const blob = new Blob([dataStr], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
 
@@ -593,22 +794,57 @@ $(document).ready(function() {
             try {
                 const imported = JSON.parse(e.target.result);
 
-                if (!Array.isArray(imported)) {
-                    throw new Error('設定は配列形式である必要があります');
-                }
+                // 新形式か旧形式かを判定してバリデーション
+                if (imported.groups && Array.isArray(imported.groups)) {
+                    // 新形式
+                    imported.groups.forEach((group, gi) => {
+                        if (!group.name) {
+                            throw new Error(`グループ${gi + 1}にnameがありません`);
+                        }
+                        if (!Array.isArray(group.timers)) {
+                            throw new Error(`グループ「${group.name}」のtimersが配列ではありません`);
+                        }
+                        group.timers.forEach((item, index) => {
+                            if (!item.title || !item.targetTime) {
+                                throw new Error(`グループ「${group.name}」の項目${index + 1}に title または targetTime がありません`);
+                            }
+                        });
+                    });
 
-                // 簡易バリデーション
-                imported.forEach((item, index) => {
-                    if (!item.title || !item.targetTime) {
-                        throw new Error(`項目${index + 1}に title または targetTime がありません`);
+                    const totalTimers = imported.groups.reduce((sum, g) => sum + g.timers.length, 0);
+                    if (confirm(`${imported.groups.length}グループ、合計${totalTimers}件のタイマーをインポートします。現在の設定は上書きされます。よろしいですか？`)) {
+                        settings = imported;
+                        if (settings.active < 0 || settings.active >= settings.groups.length) {
+                            settings.active = 0;
+                        }
+                        renderGroupSelect();
+                        loadCurrentGroup();
+                        renderTimerList();
+                        updateJsonTextarea();
+                        alert('インポートが完了しました！\n「保存」ボタンを押すとCookieに保存されます。');
                     }
-                });
+                } else if (Array.isArray(imported)) {
+                    // 旧形式 - validateTargetTimeで修正も行う
+                    const validTimers = imported
+                        .filter(item => item && typeof item.title === 'string' && typeof item.targetTime === 'string')
+                        .map(item => ({
+                            title: item.title,
+                            targetTime: validateTargetTime(item.targetTime)
+                        }))
+                        .filter(item => item.targetTime !== null);
 
-                if (confirm(`${imported.length}件の設定をインポートします。現在の設定は上書きされます。よろしいですか？`)) {
-                    timerList = imported;
-                    renderTimerList();
-                    updateJsonTextarea();
-                    alert('インポートが完了しました！\n「保存」ボタンを押すとCookieに保存されます。');
+                    if (validTimers.length === 0) {
+                        throw new Error('有効なタイマーがありません');
+                    }
+
+                    if (confirm(`${validTimers.length}件のタイマーを現在のグループにインポートします。現在のグループのタイマーは上書きされます。よろしいですか？`)) {
+                        timerList = validTimers;
+                        renderTimerList();
+                        updateJsonTextarea();
+                        alert('インポートが完了しました！\n「保存」ボタンを押すとCookieに保存されます。');
+                    }
+                } else {
+                    throw new Error('不正なファイル形式です');
                 }
             } catch (err) {
                 alert('ファイルの読み込みに失敗しました: ' + err.message);
@@ -742,7 +978,8 @@ $(document).ready(function() {
     }
 
     function updateJsonTextarea() {
-        $('#jsonTextarea').val(JSON.stringify(timerList, null, 2));
+        saveCurrentGroup();
+        $('#jsonTextarea').val(JSON.stringify(settings, null, 2));
     }
 
     // 初期化実行

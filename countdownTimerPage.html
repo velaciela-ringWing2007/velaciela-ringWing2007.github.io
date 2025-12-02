@@ -49,14 +49,17 @@
 </head>
 <body>
 <div class="container">
-    <div class="row">
-        <div class="col-5">
-            <h4>残された時間</h4>
+    <div class="row align-items-center mb-2">
+        <div class="col-auto">
+            <h4 class="mb-0">残された時間</h4>
         </div>
-        <div class="col-6">
-            <h4 class="text-end datetime-now" id="datetimenow"></h4>
+        <div class="col-auto">
+            <select class="form-select form-select-sm" id="groupSelect" style="min-width: 150px;"></select>
         </div>
-        <div class="col-1 text-end">
+        <div class="col">
+            <h4 class="text-end datetime-now mb-0" id="datetimenow"></h4>
+        </div>
+        <div class="col-auto">
             <a href="timerSettingsPage.html" class="btn btn-outline-secondary" title="設定画面">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-gear" viewBox="0 0 16 16">
                     <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"></path>
@@ -82,14 +85,23 @@
 
 <script>
     $(document).ready(function () {
-        const defaultTimerList = [
-            // 既定のタイマー設定をここに記述
-            {title: "起床時刻", targetTime: "07:00:00"},
-            {title: "勤務開始時刻", targetTime: "09:00:00"},
-            {title: "定時まで", targetTime: "18:00:00"},
-            {title: "就寝時間まで", targetTime: "24:00:00"},
-        ];
+        // デフォルトの設定データ（新構造）
+        const defaultSettings = {
+            active: 0,
+            groups: [
+                {
+                    name: "仕事用",
+                    timers: [
+                        {title: "起床時刻", targetTime: "07:00:00"},
+                        {title: "勤務開始時刻", targetTime: "09:00:00"},
+                        {title: "定時まで", targetTime: "18:00:00"},
+                        {title: "就寝時間まで", targetTime: "24:00:00"},
+                    ]
+                }
+            ]
+        };
 
+        let settings = null;
         let timerList = [];
 
         function calculateRemainingTime(targetTime) {
@@ -212,7 +224,7 @@
                 const remainingSeconds = calculateRemainingTime(timer.targetTime);
                 // 特定日時、毎週、毎月は日数表示
                 const displayDays = timer.targetTime.includes("T") || timer.targetTime.startsWith("W") || timer.targetTime.startsWith("D");
-                const element = $("#" + timer.title);
+                const element = $("#" + CSS.escape(timer.title));
                 updateTextColor(element, remainingSeconds);
 
                 if (remainingSeconds > 0) {
@@ -248,10 +260,10 @@
             $("#datetimenow").text(timeString);
         }
 
-        function saveSettingsToCookie(settings) {
+        function saveSettingsToCookie(data) {
             const expirationDate = new Date();
             expirationDate.setFullYear(expirationDate.getFullYear() + 1);
-            document.cookie = `timerList=${encodeURIComponent(JSON.stringify(settings))}; expires=${expirationDate.toUTCString()}; path=/; SameSite=Lax; Secure`;
+            document.cookie = `timerList=${encodeURIComponent(JSON.stringify(data))}; expires=${expirationDate.toUTCString()}; path=/; SameSite=Lax; Secure`;
         }
 
         function loadSettingsFromCookie() {
@@ -266,13 +278,72 @@
             return null;
         }
 
+        // targetTimeのフォーマットを検証・修正
+        function validateTargetTime(targetTime) {
+            if (typeof targetTime !== 'string') return null;
 
-        function initializeTimers() {
-            timerList = loadSettingsFromCookie() || defaultTimerList;
-            saveSettingsToCookie(timerList); // 起動時にクッキーに保存して有効期間を伸ばす
+            // 特定日時 (2024-01-01T00:00:00)
+            if (targetTime.includes('T')) return targetTime;
+            // 毎週 (W135-09:00:00)
+            if (targetTime.startsWith('W')) return targetTime;
+            // 毎月 (D25-00:00:00)
+            if (targetTime.startsWith('D')) return targetTime;
+
+            // 毎日 (HH:MM:SS) - コロンが2つ以外は不正
+            const parts = targetTime.split(':');
+            if (parts.length === 3) {
+                return targetTime; // 正常
+            } else if (parts.length === 4) {
+                // "21:00:00:00" のような誤りを "21:00:00" に修正
+                return parts.slice(0, 3).join(':');
+            }
+            return null; // 不正な形式
+        }
+
+        // 旧形式（配列）から新形式への変換
+        function migrateOldFormat(data) {
+            if (Array.isArray(data)) {
+                // 旧形式: 配列の場合は新形式に変換
+                // 有効なタイマーのみをフィルタリング＆修正
+                const validTimers = data
+                    .filter(t => t && typeof t.title === 'string' && typeof t.targetTime === 'string')
+                    .map(t => ({
+                        title: t.title,
+                        targetTime: validateTargetTime(t.targetTime)
+                    }))
+                    .filter(t => t.targetTime !== null);
+
+                const migrated = {
+                    active: 0,
+                    groups: [
+                        { name: "Timer1", timers: validTimers }
+                    ]
+                };
+                // マイグレーション後は即座に保存して次回から新形式で読み込まれるようにする
+                saveSettingsToCookie(migrated);
+                console.log('Timer settings migrated from old format to new format', migrated);
+                return migrated;
+            }
+            // 新形式: そのまま返す
+            return data;
+        }
+
+        function renderGroupSelect() {
+            const $select = $('#groupSelect');
+            $select.empty();
+            settings.groups.forEach((group, index) => {
+                $select.append(`<option value="${index}">${group.name}</option>`);
+            });
+            $select.val(settings.active);
+        }
+
+        function renderTimers() {
+            const activeGroup = settings.groups[settings.active];
+            timerList = activeGroup ? activeGroup.timers : [];
 
             $("#timers").empty();
             timerList.forEach(function (timer) {
+                const escapedId = timer.title.replace(/[^a-zA-Z0-9_-]/g, '_');
                 $("#timers").append(`
                 <h2 class="fs-5 text-muted">${timer.title} <span class="time-config">${timer.targetTime}</span></h2>
                 <p class="fs-1 fw-bold timer-value" id="${timer.title}"></p>
@@ -280,6 +351,29 @@
               `);
             });
         }
+
+        function initializeTimers() {
+            const rawData = loadSettingsFromCookie();
+            settings = rawData ? migrateOldFormat(rawData) : defaultSettings;
+
+            // activeが範囲外の場合は0にリセット
+            if (settings.active < 0 || settings.active >= settings.groups.length) {
+                settings.active = 0;
+            }
+
+            saveSettingsToCookie(settings); // 起動時にクッキーに保存して有効期間を伸ばす
+
+            renderGroupSelect();
+            renderTimers();
+        }
+
+        // グループ切り替え
+        $('#groupSelect').on('change', function() {
+            settings.active = parseInt($(this).val());
+            saveSettingsToCookie(settings);
+            renderTimers();
+            updateTimer();
+        });
 
         initializeTimers();
         updateTimer();
