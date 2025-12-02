@@ -56,13 +56,13 @@
         <div class="col-6">
             <h4 class="text-end datetime-now" id="datetimenow"></h4>
         </div>
-        <div class="col-1">
-            <button type="button" class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#settingsModal">
+        <div class="col-1 text-end">
+            <a href="timerSettingsPage.html" class="btn btn-outline-secondary" title="設定画面">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-gear" viewBox="0 0 16 16">
                     <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"></path>
                     <path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.377l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115l.094-.319z"></path>
                 </svg>
-            </button>
+            </a>
         </div>
     </div>
     <div class="row">
@@ -78,28 +78,6 @@
 
 </div>
 
-<div class="modal fade" id="settingsModal" tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="settingsModalLabel">設定を編集</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="mb-3">
-                    <p>こんな感じでJSONで設定書いて保存するとクッキーに登録される（空にして登録するとデフォルト復活）<br>※タイトルに半角スペース入れると壊れます</p>
-                    <p>{title: "起床時刻", targetTime: "08:20:00"}</p>
-                    <p>{title: "2023年残り", targetTime: "2024-01-01T00:00:00"}</p>
-                    <textarea class="form-control" id="settingsTextarea" rows="8"></textarea>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
-                <button type="button" class="btn btn-primary" id="saveSettings">保存</button>
-            </div>
-        </div>
-    </div>
-</div>
 
 
 <script>
@@ -118,16 +96,93 @@
         function calculateRemainingTime(targetTime) {
             const now = new Date();
             let target;
+
             if (targetTime.includes("T")) {
+                // 特定日時: 2024-01-01T00:00:00
                 target = new Date(targetTime);
+            } else if (targetTime.startsWith("W")) {
+                // 毎週繰り返し: W135-09:00:00 (月水金の9時)
+                const match = targetTime.match(/W(\d+)-(\d{2}:\d{2}:\d{2})/);
+                if (match) {
+                    const days = match[1].split('').map(Number); // [1, 3, 5]
+                    const timeStr = match[2];
+                    target = findNextWeeklyTarget(now, days, timeStr);
+                } else {
+                    target = now;
+                }
+            } else if (targetTime.startsWith("D")) {
+                // 毎月繰り返し: D25-00:00:00 (毎月25日) or Dlast-00:00:00 (月末)
+                const match = targetTime.match(/D(\d+|last)-(\d{2}:\d{2}:\d{2})/);
+                if (match) {
+                    const daySpec = match[1];
+                    const timeStr = match[2];
+                    target = findNextMonthlyTarget(now, daySpec, timeStr);
+                } else {
+                    target = now;
+                }
             } else {
+                // 毎日繰り返し: 09:00:00
                 target = new Date(now.toDateString() + " " + targetTime);
                 if (now > target) {
                     target.setDate(target.getDate() + 1);
                 }
-
             }
             return Math.floor((target - now) / 1000);
+        }
+
+        function findNextWeeklyTarget(now, days, timeStr) {
+            // days: [0, 1, 3, 5] (日, 月, 水, 金) - JavaScriptの曜日形式
+            const todayDay = now.getDay();
+            const [hours, minutes, seconds] = timeStr.split(':').map(Number);
+
+            // 今日を含めて7日分チェック
+            for (let i = 0; i <= 7; i++) {
+                const checkDate = new Date(now);
+                checkDate.setDate(now.getDate() + i);
+                const checkDay = checkDate.getDay();
+
+                if (days.includes(checkDay)) {
+                    const target = new Date(checkDate);
+                    target.setHours(hours, minutes, seconds, 0);
+                    if (target > now) {
+                        return target;
+                    }
+                }
+            }
+            // フォールバック（来週の最初の該当日）
+            const target = new Date(now);
+            target.setDate(now.getDate() + 7);
+            target.setHours(hours, minutes, seconds, 0);
+            return target;
+        }
+
+        function findNextMonthlyTarget(now, daySpec, timeStr) {
+            const [hours, minutes, seconds] = timeStr.split(':').map(Number);
+
+            // 今月と来月をチェック
+            for (let monthOffset = 0; monthOffset <= 1; monthOffset++) {
+                const checkDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+                let targetDay;
+
+                if (daySpec === 'last') {
+                    // 月末
+                    targetDay = new Date(checkDate.getFullYear(), checkDate.getMonth() + 1, 0).getDate();
+                } else {
+                    targetDay = parseInt(daySpec);
+                    // 月の最終日を超えないようにする
+                    const lastDay = new Date(checkDate.getFullYear(), checkDate.getMonth() + 1, 0).getDate();
+                    targetDay = Math.min(targetDay, lastDay);
+                }
+
+                const target = new Date(checkDate.getFullYear(), checkDate.getMonth(), targetDay, hours, minutes, seconds);
+                if (target > now) {
+                    return target;
+                }
+            }
+            // フォールバック
+            const target = new Date(now);
+            target.setMonth(now.getMonth() + 2, 1);
+            return target;
         }
 
         function formatTime(seconds, isNegative = false, displayDays = true) {
@@ -156,7 +211,8 @@
 
             timerList.forEach(function (timer) {
                 const remainingSeconds = calculateRemainingTime(timer.targetTime);
-                const displayDays = timer.targetTime.includes("T");
+                // 特定日時、毎週、毎月は日数表示
+                const displayDays = timer.targetTime.includes("T") || timer.targetTime.startsWith("W") || timer.targetTime.startsWith("D");
                 const element = $("#" + timer.title);
                 updateTextColor(element, remainingSeconds);
 
@@ -211,26 +267,6 @@
             return null;
         }
 
-
-        $('#settingsModal').on('show.bs.modal', function () {
-            $('#settingsTextarea').val(JSON.stringify(timerList, null, 2));
-        });
-
-        $('#saveSettings').on('click', function () {
-            try {
-                let settingsTextAreasString = $("#settingsTextarea").val();
-                const newTimerList = JSON.parse(settingsTextAreasString == "" ? JSON.stringify(defaultTimerList) : settingsTextAreasString);
-                timerList.length = 0;
-                Array.prototype.push.apply(timerList, newTimerList);
-                saveSettingsToCookie(timerList);
-                $('#settingsModal').modal('hide');
-                initializeTimers();
-                updateTimer();
-            } catch (e) {
-                alert('設定の読み込みに失敗しました。JSONの書式を確認してください。');
-                console.error('Failed to load new settings:', e);
-            }
-        });
 
         function initializeTimers() {
             timerList = loadSettingsFromCookie() || defaultTimerList;
