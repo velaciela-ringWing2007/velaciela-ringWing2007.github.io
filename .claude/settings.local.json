@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat: タイマー設定マスタメンテ画面を追加\n\n- 新規: timerSettingsPage.html（タイマー設定画面）\n  - 毎日/毎週/毎月/特定日時の4種類に対応\n  - カレンダー・タイムピッカーによる直感的な操作\n  - ドラッグ&ドロップで並び替え可能\n- countdownTimerPage.html\n  - 毎週・毎月繰り返しのロジックを追加\n  - 設定ポップアップを削除し設定画面へのリンクに変更\n- index.html: タイマー設定へのリンクを追加\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat: タイマー設定のエクスポート/インポート機能を追加\n\n- JSONファイルとして設定をダウンロード\n- ドラッグ&ドロップまたはファイル選択でインポート\n- インポート時のバリデーション付き\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
