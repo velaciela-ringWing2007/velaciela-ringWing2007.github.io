@@ -14,7 +14,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            padding: 20px;
+            padding: 10px;
         }
 
         .clock-svg {
@@ -29,13 +29,44 @@
             margin-bottom: 20px;
         }
 
+        .clock-settings {
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .clock-settings-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
         .color-preview {
-            width: 30px;
-            height: 30px;
+            width: 24px;
+            height: 24px;
             border: 1px solid #ccc;
             border-radius: 4px;
             display: inline-block;
             vertical-align: middle;
+        }
+
+        .clocks-print-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .clocks-print-area.horizontal {
+            flex-direction: row;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .clocks-print-area.horizontal .clock-container {
+            width: 50%;
         }
 
         /* 印刷時の設定 */
@@ -45,14 +76,17 @@
             }
 
             .clock-container {
-                padding: 0;
+                padding: 5px;
                 margin: 0;
+                page-break-inside: avoid;
             }
 
-            .clock-svg {
-                width: 100%;
-                height: auto;
-                max-height: 95vh;
+            .clocks-print-area {
+                align-items: center;
+            }
+
+            .clocks-print-area.horizontal .clock-container {
+                width: 50%;
             }
 
             body {
@@ -62,26 +96,38 @@
 
             @page {
                 size: A4;
-                margin: 10mm;
+                margin: 5mm;
             }
         }
 
         .time-input {
-            width: 80px;
+            width: 65px;
             text-align: center;
-            font-size: 1.2rem;
+            font-size: 1rem;
             font-weight: bold;
         }
 
         .time-separator {
-            font-size: 1.5rem;
+            font-size: 1.2rem;
             font-weight: bold;
-            margin: 0 5px;
+            margin: 0 3px;
         }
 
         .number-label {
             font-family: 'Arial Rounded MT Bold', 'Hiragino Maru Gothic Pro', sans-serif;
             font-weight: bold;
+        }
+
+        .btn-remove-clock {
+            padding: 2px 8px;
+            font-size: 0.8rem;
+        }
+
+        .global-settings {
+            background: #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
         }
     </style>
 </head>
@@ -91,81 +137,38 @@
     <div class="settings-panel no-print">
         <h4 class="mb-3">⏰ 時計プリント - 時間学習用</h4>
         
-        <!-- 時刻設定 -->
-        <div class="row mb-3">
-            <div class="col-md-6 mb-2">
-                <label class="form-label fw-bold">タイトル（印刷時に表示）</label>
-                <input type="text" id="titleInput" class="form-control" placeholder="例: 3じ30ぷん">
-            </div>
-            <div class="col-md-6">
-                <label class="form-label fw-bold">表示する時刻</label>
-                <div class="d-flex align-items-center flex-wrap gap-2">
-                    <input type="number" id="hourInput" class="form-control time-input" min="0" max="28" value="10">
-                    <span class="time-separator">:</span>
-                    <input type="number" id="minuteInput" class="form-control time-input" min="0" max="59" value="10">
-                    <span class="time-separator">:</span>
-                    <input type="number" id="secondInput" class="form-control time-input" min="0" max="59" value="0">
-                    <button class="btn btn-outline-secondary btn-sm" id="nowBtn">現在時刻</button>
+        <!-- グローバル設定 -->
+        <div class="global-settings">
+            <div class="row align-items-center">
+                <div class="col-auto">
+                    <label class="form-label mb-0 fw-bold">レイアウト:</label>
+                </div>
+                <div class="col-auto">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="layout" id="layoutVertical" value="vertical" checked>
+                        <label class="form-check-label" for="layoutVertical">縦並び</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="layout" id="layoutHorizontal" value="horizontal">
+                        <label class="form-check-label" for="layoutHorizontal">横2列</label>
+                    </div>
+                </div>
+                <div class="col-auto ms-auto">
+                    <button class="btn btn-success" id="addClockBtn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-lg me-1" viewBox="0 0 16 16">
+                            <path d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2Z"/>
+                        </svg>
+                        時計を追加
+                    </button>
                 </div>
             </div>
         </div>
 
-        <!-- 色設定 -->
-        <div class="row mb-3">
-            <div class="col-md-4 col-6 mb-2">
-                <label class="form-label">短針（時）の色</label>
-                <div class="d-flex align-items-center gap-2">
-                    <input type="color" id="hourColor" class="form-control form-control-color" value="#dc3545">
-                    <span class="color-preview" id="hourColorPreview" style="background-color: #dc3545;"></span>
-                </div>
-            </div>
-            <div class="col-md-4 col-6 mb-2">
-                <label class="form-label">長針（分）の色</label>
-                <div class="d-flex align-items-center gap-2">
-                    <input type="color" id="minuteColor" class="form-control form-control-color" value="#0d6efd">
-                    <span class="color-preview" id="minuteColorPreview" style="background-color: #0d6efd;"></span>
-                </div>
-            </div>
-            <div class="col-md-4 col-6 mb-2">
-                <label class="form-label">秒針の色</label>
-                <div class="d-flex align-items-center gap-2">
-                    <input type="color" id="secondColor" class="form-control form-control-color" value="#198754">
-                    <span class="color-preview" id="secondColorPreview" style="background-color: #198754;"></span>
-                    <div class="form-check ms-2">
-                        <input class="form-check-input" type="checkbox" id="showSecond" checked>
-                        <label class="form-check-label" for="showSecond">表示</label>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- オプション -->
-        <div class="row mb-3">
-            <div class="col-12">
-                <label class="form-label fw-bold">表示オプション</label>
-                <div class="d-flex flex-wrap gap-3">
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="showNumbers" checked>
-                        <label class="form-check-label" for="showNumbers">数字を表示</label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="showMinuteMarks" checked>
-                        <label class="form-check-label" for="showMinuteMarks">分の目盛りを表示</label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="showDigitalTime">
-                        <label class="form-check-label" for="showDigitalTime">デジタル時刻を表示</label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="use24Hour">
-                        <label class="form-check-label" for="use24Hour">24時間表示</label>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <!-- 個別時計設定（動的に追加） -->
+        <div id="clockSettingsContainer"></div>
 
         <!-- ボタン -->
-        <div class="row">
+        <div class="row mt-3">
             <div class="col-12">
                 <button class="btn btn-primary btn-lg" id="printBtn">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-printer me-2" viewBox="0 0 16 16">
@@ -180,84 +183,183 @@
     </div>
 
     <!-- 時計表示エリア -->
-    <div class="clock-container">
-        <svg id="clockSvg" class="clock-svg" viewBox="0 0 400 520" width="400" height="520">
-            <!-- タイトル -->
-            <text id="titleText" x="200" y="40" text-anchor="middle" 
-                  font-size="28" font-weight="bold" fill="#333"></text>
-            
-            <!-- 時計本体のグループ（下にオフセット） -->
-            <g transform="translate(0, 60)">
-                <!-- 時計の外枠 -->
-                <circle cx="200" cy="200" r="190" fill="white" stroke="#333" stroke-width="4"/>
-                
-                <!-- 目盛りと数字はJSで描画 -->
-                <g id="marks"></g>
-                <g id="numbers"></g>
-                
-                <!-- 針 -->
-                <g id="hands">
-                    <!-- 時針（短針） -->
-                    <line id="hourHand" x1="200" y1="200" x2="200" y2="90" 
-                          stroke="#dc3545" stroke-width="10" stroke-linecap="round"/>
-                    <!-- 分針（長針） -->
-                    <line id="minuteHand" x1="200" y1="200" x2="200" y2="50" 
-                          stroke="#0d6efd" stroke-width="6" stroke-linecap="round"/>
-                    <!-- 秒針 -->
-                    <line id="secondHand" x1="200" y1="200" x2="200" y2="40" 
-                          stroke="#198754" stroke-width="2" stroke-linecap="round"/>
-                </g>
-                
-                <!-- 中心の丸 -->
-                <circle cx="200" cy="200" r="10" fill="#333"/>
-            </g>
-            
-            <!-- デジタル時刻表示 -->
-            <text id="digitalTime" x="200" y="500" text-anchor="middle" 
-                  font-size="32" font-family="monospace" font-weight="bold" fill="#333"
-                  style="display: none;"></text>
-        </svg>
-    </div>
+    <div class="clocks-print-area" id="clocksPrintArea"></div>
 </div>
 
 <script>
-    // DOM要素の取得
-    const titleInput = document.getElementById('titleInput');
-    const hourInput = document.getElementById('hourInput');
-    const minuteInput = document.getElementById('minuteInput');
-    const secondInput = document.getElementById('secondInput');
-    const hourColor = document.getElementById('hourColor');
-    const minuteColor = document.getElementById('minuteColor');
-    const secondColor = document.getElementById('secondColor');
-    const showSecond = document.getElementById('showSecond');
-    const showNumbers = document.getElementById('showNumbers');
-    const showMinuteMarks = document.getElementById('showMinuteMarks');
-    const showDigitalTime = document.getElementById('showDigitalTime');
-    const use24Hour = document.getElementById('use24Hour');
-    const printBtn = document.getElementById('printBtn');
-    const nowBtn = document.getElementById('nowBtn');
+    let clockId = 0;
+    const clocks = [];
 
-    // SVG要素
-    const titleText = document.getElementById('titleText');
-    const hourHand = document.getElementById('hourHand');
-    const minuteHand = document.getElementById('minuteHand');
-    const secondHand = document.getElementById('secondHand');
-    const marksGroup = document.getElementById('marks');
-    const numbersGroup = document.getElementById('numbers');
-    const digitalTime = document.getElementById('digitalTime');
+    // 時計設定のHTMLテンプレート
+    function createClockSettingsHTML(id) {
+        return `
+        <div class="clock-settings" data-clock-id="${id}">
+            <div class="clock-settings-header">
+                <strong>時計 #${id + 1}</strong>
+                <button class="btn btn-outline-danger btn-remove-clock" onclick="removeClock(${id})">削除</button>
+            </div>
+            <div class="row">
+                <div class="col-md-4 col-12 mb-2">
+                    <label class="form-label">タイトル</label>
+                    <div class="d-flex align-items-center">
+                        <input type="text" class="form-control form-control-sm clock-title" data-id="${id}" placeholder="例: 開始時刻">
+                        <button class="btn btn-outline-warning btn-sm ms-1 clock-clear-title-btn" data-id="${id}" title="タイトルクリア">×</button>
+                    </div>
+                </div>
+                <div class="col-md-4 col-12 mb-2">
+                    <label class="form-label">時刻</label>
+                    <div class="d-flex align-items-center">
+                        <input type="number" class="form-control time-input clock-hour" data-id="${id}" min="0" max="28" value="10">
+                        <span class="time-separator">:</span>
+                        <input type="number" class="form-control time-input clock-minute" data-id="${id}" min="0" max="59" value="0">
+                        <span class="time-separator">:</span>
+                        <input type="number" class="form-control time-input clock-second" data-id="${id}" min="0" max="59" value="0">
+                        <button class="btn btn-outline-secondary btn-sm ms-2 clock-now-btn" data-id="${id}" title="現在時刻">今</button>
+                        <button class="btn btn-outline-warning btn-sm ms-1 clock-clear-btn" data-id="${id}" title="クリア">×</button>
+                    </div>
+                </div>
+                <div class="col-md-4 col-12 mb-2">
+                    <label class="form-label">針の色</label>
+                    <div class="d-flex align-items-center gap-2">
+                        <input type="color" class="form-control form-control-color form-control-sm clock-hour-color" data-id="${id}" value="#dc3545" title="短針">
+                        <input type="color" class="form-control form-control-color form-control-sm clock-minute-color" data-id="${id}" value="#0d6efd" title="長針">
+                        <input type="color" class="form-control form-control-color form-control-sm clock-second-color" data-id="${id}" value="#198754" title="秒針">
+                        <div class="form-check ms-2">
+                            <input class="form-check-input clock-show-second" type="checkbox" data-id="${id}" checked>
+                            <label class="form-check-label" style="font-size:0.8rem;">秒</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-12">
+                    <div class="d-flex flex-wrap gap-3">
+                        <div class="form-check">
+                            <input class="form-check-input clock-show-numbers" type="checkbox" data-id="${id}" checked>
+                            <label class="form-check-label">数字</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input clock-show-marks" type="checkbox" data-id="${id}" checked>
+                            <label class="form-check-label">目盛り</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input clock-show-digital" type="checkbox" data-id="${id}">
+                            <label class="form-check-label">デジタル</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input clock-use-24h" type="checkbox" data-id="${id}">
+                            <label class="form-check-label">24時間</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        `;
+    }
+
+    // 時計SVGのHTMLテンプレート
+    function createClockSVGHTML(id) {
+        return `
+        <div class="clock-container" data-clock-id="${id}">
+            <svg class="clock-svg" data-id="${id}" viewBox="0 0 400 480" width="300" height="360">
+                <text class="clock-title-text" data-id="${id}" x="200" y="35" text-anchor="middle" 
+                      font-size="24" font-weight="bold" fill="#333"></text>
+                
+                <g transform="translate(0, 50)">
+                    <circle cx="200" cy="200" r="180" fill="white" stroke="#333" stroke-width="3"/>
+                    <g class="clock-marks" data-id="${id}"></g>
+                    <g class="clock-numbers" data-id="${id}"></g>
+                    <g class="clock-hands" data-id="${id}">
+                        <line class="clock-hour-hand" data-id="${id}" x1="200" y1="200" x2="200" y2="100" 
+                              stroke="#dc3545" stroke-width="8" stroke-linecap="round"/>
+                        <line class="clock-minute-hand" data-id="${id}" x1="200" y1="200" x2="200" y2="60" 
+                              stroke="#0d6efd" stroke-width="5" stroke-linecap="round"/>
+                        <line class="clock-second-hand" data-id="${id}" x1="200" y1="200" x2="200" y2="50" 
+                              stroke="#198754" stroke-width="2" stroke-linecap="round"/>
+                    </g>
+                    <circle cx="200" cy="200" r="8" fill="#333"/>
+                </g>
+                
+                <text class="clock-digital-text" data-id="${id}" x="200" y="465" text-anchor="middle" 
+                      font-size="28" font-family="monospace" font-weight="bold" fill="#333"
+                      style="display: none;"></text>
+            </svg>
+        </div>
+        `;
+    }
+
+    // 時計を追加
+    function addClock() {
+        const id = clockId++;
+        clocks.push(id);
+        
+        // 設定パネルに追加
+        document.getElementById('clockSettingsContainer').insertAdjacentHTML('beforeend', createClockSettingsHTML(id));
+        
+        // 表示エリアに追加
+        document.getElementById('clocksPrintArea').insertAdjacentHTML('beforeend', createClockSVGHTML(id));
+        
+        // イベントリスナー設定
+        setupClockEventListeners(id);
+        
+        // 初期描画
+        drawClockMarks(id);
+        drawClockNumbers(id);
+        updateClockHands(id);
+    }
+
+    // 時計を削除
+    function removeClock(id) {
+        if (clocks.length <= 1) {
+            alert('最低1つの時計が必要です');
+            return;
+        }
+        
+        const index = clocks.indexOf(id);
+        if (index > -1) {
+            clocks.splice(index, 1);
+        }
+        
+        document.querySelector(`.clock-settings[data-clock-id="${id}"]`).remove();
+        document.querySelector(`.clock-container[data-clock-id="${id}"]`).remove();
+    }
+
+    // イベントリスナー設定
+    function setupClockEventListeners(id) {
+        const settings = document.querySelector(`.clock-settings[data-clock-id="${id}"]`);
+        
+        settings.querySelector('.clock-title').addEventListener('input', () => updateClockTitle(id));
+        settings.querySelector('.clock-hour').addEventListener('input', () => updateClockHands(id));
+        settings.querySelector('.clock-minute').addEventListener('input', () => updateClockHands(id));
+        settings.querySelector('.clock-second').addEventListener('input', () => updateClockHands(id));
+        settings.querySelector('.clock-hour-color').addEventListener('input', () => updateClockColors(id));
+        settings.querySelector('.clock-minute-color').addEventListener('input', () => updateClockColors(id));
+        settings.querySelector('.clock-second-color').addEventListener('input', () => updateClockColors(id));
+        settings.querySelector('.clock-show-second').addEventListener('change', () => updateClockSecondVisibility(id));
+        settings.querySelector('.clock-show-numbers').addEventListener('change', () => drawClockNumbers(id));
+        settings.querySelector('.clock-show-marks').addEventListener('change', () => drawClockMarks(id));
+        settings.querySelector('.clock-show-digital').addEventListener('change', () => updateClockDigitalVisibility(id));
+        settings.querySelector('.clock-use-24h').addEventListener('change', () => updateClockHands(id));
+        settings.querySelector('.clock-now-btn').addEventListener('click', () => setClockNow(id));
+        settings.querySelector('.clock-clear-btn').addEventListener('click', () => clearClockTime(id));
+        settings.querySelector('.clock-clear-title-btn').addEventListener('click', () => clearClockTitle(id));
+    }
 
     // 目盛りを描画
-    function drawMarks() {
+    function drawClockMarks(id) {
+        const marksGroup = document.querySelector(`.clock-marks[data-id="${id}"]`);
+        const showMarks = document.querySelector(`.clock-show-marks[data-id="${id}"]`).checked;
         marksGroup.innerHTML = '';
-        const cx = 200, cy = 200, r = 175;
+        
+        const cx = 200, cy = 200, r = 165;
         
         for (let i = 0; i < 60; i++) {
             const angle = (i * 6 - 90) * Math.PI / 180;
             const isHour = i % 5 === 0;
             
-            if (!showMinuteMarks.checked && !isHour) continue;
+            if (!showMarks && !isHour) continue;
             
-            const innerR = isHour ? r - 20 : r - 10;
+            const innerR = isHour ? r - 18 : r - 8;
             const x1 = cx + innerR * Math.cos(angle);
             const y1 = cy + innerR * Math.sin(angle);
             const x2 = cx + r * Math.cos(angle);
@@ -269,17 +371,20 @@
             line.setAttribute('x2', x2);
             line.setAttribute('y2', y2);
             line.setAttribute('stroke', '#333');
-            line.setAttribute('stroke-width', isHour ? 4 : 2);
+            line.setAttribute('stroke-width', isHour ? 3 : 1.5);
             marksGroup.appendChild(line);
         }
     }
 
     // 数字を描画
-    function drawNumbers() {
+    function drawClockNumbers(id) {
+        const numbersGroup = document.querySelector(`.clock-numbers[data-id="${id}"]`);
+        const showNumbers = document.querySelector(`.clock-show-numbers[data-id="${id}"]`).checked;
         numbersGroup.innerHTML = '';
-        if (!showNumbers.checked) return;
         
-        const cx = 200, cy = 200, r = 130;
+        if (!showNumbers) return;
+        
+        const cx = 200, cy = 200, r = 125;
         
         for (let i = 1; i <= 12; i++) {
             const angle = (i * 30 - 90) * Math.PI / 180;
@@ -291,40 +396,42 @@
             text.setAttribute('y', y);
             text.setAttribute('text-anchor', 'middle');
             text.setAttribute('dominant-baseline', 'central');
-            text.setAttribute('font-size', '28');
+            text.setAttribute('font-size', '24');
             text.setAttribute('font-weight', 'bold');
             text.setAttribute('fill', '#333');
-            text.setAttribute('class', 'number-label');
             text.textContent = i;
             numbersGroup.appendChild(text);
         }
     }
 
     // 針の位置を更新
-    function updateHands() {
-        let hour = parseInt(hourInput.value) || 0;
-        let minute = parseInt(minuteInput.value) || 0;
-        let second = parseInt(secondInput.value) || 0;
+    function updateClockHands(id) {
+        const settings = document.querySelector(`.clock-settings[data-clock-id="${id}"]`);
+        let hour = parseInt(settings.querySelector('.clock-hour').value) || 0;
+        let minute = parseInt(settings.querySelector('.clock-minute').value) || 0;
+        let second = parseInt(settings.querySelector('.clock-second').value) || 0;
+        const use24h = settings.querySelector('.clock-use-24h').checked;
         
-        // 値の正規化
         hour = Math.max(0, Math.min(28, hour));
         minute = Math.max(0, Math.min(59, minute));
         second = Math.max(0, Math.min(59, second));
         
-        // 角度計算（12時が0度、時計回り）- 時針は12時間で1周
         const hourAngle = (hour % 12 + minute / 60) * 30;
         const minuteAngle = (minute + second / 60) * 6;
         const secondAngle = second * 6;
         
-        // 針の終点座標を計算
         const cx = 200, cy = 200;
-        const hourLength = 110;
-        const minuteLength = 150;
-        const secondLength = 160;
+        const hourLength = 100;
+        const minuteLength = 140;
+        const secondLength = 150;
         
         const hourRad = (hourAngle - 90) * Math.PI / 180;
         const minuteRad = (minuteAngle - 90) * Math.PI / 180;
         const secondRad = (secondAngle - 90) * Math.PI / 180;
+        
+        const hourHand = document.querySelector(`.clock-hour-hand[data-id="${id}"]`);
+        const minuteHand = document.querySelector(`.clock-minute-hand[data-id="${id}"]`);
+        const secondHand = document.querySelector(`.clock-second-hand[data-id="${id}"]`);
         
         hourHand.setAttribute('x2', cx + hourLength * Math.cos(hourRad));
         hourHand.setAttribute('y2', cy + hourLength * Math.sin(hourRad));
@@ -336,95 +443,96 @@
         secondHand.setAttribute('y2', cy + secondLength * Math.sin(secondRad));
         
         // デジタル時刻更新
-        let displayHour = hour;
-        if (!use24Hour.checked) {
-            displayHour = hour % 12 || 12;
-        }
-        const hourStr = String(displayHour).padStart(2, '0');
-        const minStr = String(minute).padStart(2, '0');
-        const secStr = String(second).padStart(2, '0');
-        digitalTime.textContent = `${hourStr}:${minStr}:${secStr}`;
+        let displayHour = use24h ? hour : (hour % 12 || 12);
+        const digitalText = document.querySelector(`.clock-digital-text[data-id="${id}"]`);
+        digitalText.textContent = `${String(displayHour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
     }
 
-    // 色を更新
-    function updateColors() {
-        hourHand.setAttribute('stroke', hourColor.value);
-        minuteHand.setAttribute('stroke', minuteColor.value);
-        secondHand.setAttribute('stroke', secondColor.value);
+    // タイトル更新
+    function updateClockTitle(id) {
+        const title = document.querySelector(`.clock-title[data-id="${id}"]`).value;
+        document.querySelector(`.clock-title-text[data-id="${id}"]`).textContent = title;
+    }
+
+    // 色更新
+    function updateClockColors(id) {
+        const settings = document.querySelector(`.clock-settings[data-clock-id="${id}"]`);
+        const hourColor = settings.querySelector('.clock-hour-color').value;
+        const minuteColor = settings.querySelector('.clock-minute-color').value;
+        const secondColor = settings.querySelector('.clock-second-color').value;
         
-        document.getElementById('hourColorPreview').style.backgroundColor = hourColor.value;
-        document.getElementById('minuteColorPreview').style.backgroundColor = minuteColor.value;
-        document.getElementById('secondColorPreview').style.backgroundColor = secondColor.value;
+        document.querySelector(`.clock-hour-hand[data-id="${id}"]`).setAttribute('stroke', hourColor);
+        document.querySelector(`.clock-minute-hand[data-id="${id}"]`).setAttribute('stroke', minuteColor);
+        document.querySelector(`.clock-second-hand[data-id="${id}"]`).setAttribute('stroke', secondColor);
     }
 
-    // 秒針の表示/非表示
-    function updateSecondVisibility() {
-        secondHand.style.display = showSecond.checked ? '' : 'none';
+    // 秒針表示/非表示
+    function updateClockSecondVisibility(id) {
+        const show = document.querySelector(`.clock-show-second[data-id="${id}"]`).checked;
+        document.querySelector(`.clock-second-hand[data-id="${id}"]`).style.display = show ? '' : 'none';
     }
 
-    // デジタル時刻の表示/非表示
-    function updateDigitalVisibility() {
-        digitalTime.style.display = showDigitalTime.checked ? '' : 'none';
-    }
-
-    // タイトルを更新
-    function updateTitle() {
-        titleText.textContent = titleInput.value;
+    // デジタル表示/非表示
+    function updateClockDigitalVisibility(id) {
+        const show = document.querySelector(`.clock-show-digital[data-id="${id}"]`).checked;
+        document.querySelector(`.clock-digital-text[data-id="${id}"]`).style.display = show ? '' : 'none';
     }
 
     // 現在時刻を設定
-    function setCurrentTime() {
+    function setClockNow(id) {
+        const settings = document.querySelector(`.clock-settings[data-clock-id="${id}"]`);
         const now = new Date();
-        hourInput.value = now.getHours();
-        minuteInput.value = now.getMinutes();
-        secondInput.value = now.getSeconds();
-        updateHands();
+        settings.querySelector('.clock-hour').value = now.getHours();
+        settings.querySelector('.clock-minute').value = now.getMinutes();
+        settings.querySelector('.clock-second').value = now.getSeconds();
+        updateClockHands(id);
     }
 
-    // 入力値の正規化
-    function normalizeInput(input, min, max) {
-        let value = parseInt(input.value) || 0;
-        if (value < min) value = min;
-        if (value > max) value = max;
-        input.value = value;
+    // 時刻クリア
+    function clearClockTime(id) {
+        const settings = document.querySelector(`.clock-settings[data-clock-id="${id}"]`);
+        settings.querySelector('.clock-hour').value = 0;
+        settings.querySelector('.clock-minute').value = 0;
+        settings.querySelector('.clock-second').value = 0;
+        updateClockHands(id);
     }
 
-    // イベントリスナー
-    hourInput.addEventListener('input', () => {
-        normalizeInput(hourInput, 0, 28);
-        updateHands();
-    });
-    minuteInput.addEventListener('input', () => {
-        normalizeInput(minuteInput, 0, 59);
-        updateHands();
-    });
-    secondInput.addEventListener('input', () => {
-        normalizeInput(secondInput, 0, 59);
-        updateHands();
-    });
+    // タイトルクリア
+    function clearClockTitle(id) {
+        const settings = document.querySelector(`.clock-settings[data-clock-id="${id}"]`);
+        settings.querySelector('.clock-title').value = '';
+        updateClockTitle(id);
+    }
 
-    hourColor.addEventListener('input', updateColors);
-    minuteColor.addEventListener('input', updateColors);
-    secondColor.addEventListener('input', updateColors);
-    
-    showSecond.addEventListener('change', updateSecondVisibility);
-    showNumbers.addEventListener('change', drawNumbers);
-    showMinuteMarks.addEventListener('change', drawMarks);
-    showDigitalTime.addEventListener('change', updateDigitalVisibility);
-    use24Hour.addEventListener('change', updateHands);
-    
-    nowBtn.addEventListener('click', setCurrentTime);
-    printBtn.addEventListener('click', () => window.print());
-    titleInput.addEventListener('input', updateTitle);
+    // レイアウト変更
+    function updateLayout() {
+        const isHorizontal = document.getElementById('layoutHorizontal').checked;
+        const printArea = document.getElementById('clocksPrintArea');
+        
+        if (isHorizontal) {
+            printArea.classList.add('horizontal');
+        } else {
+            printArea.classList.remove('horizontal');
+        }
+    }
 
     // 初期化
-    drawMarks();
-    drawNumbers();
-    updateHands();
-    updateColors();
-    updateSecondVisibility();
-    updateDigitalVisibility();
-    updateTitle();
+    document.getElementById('addClockBtn').addEventListener('click', addClock);
+    document.getElementById('printBtn').addEventListener('click', () => window.print());
+    document.getElementById('layoutVertical').addEventListener('change', updateLayout);
+    document.getElementById('layoutHorizontal').addEventListener('change', updateLayout);
+
+    // 初期時計を2つ追加
+    addClock();
+    addClock();
+    
+    // デフォルト値設定
+    document.querySelector('.clock-title[data-id="0"]').value = '開始';
+    document.querySelector('.clock-title[data-id="1"]').value = '終了';
+    document.querySelector('.clock-hour[data-id="1"]').value = '11';
+    updateClockTitle(0);
+    updateClockTitle(1);
+    updateClockHands(1);
 </script>
 </body>
 </html>
