@@ -2,6 +2,22 @@
 
 日常で使える便利なWebツール集です。
 
+## 📁 ファイル構成
+
+```
+.
+├── index.html              # トップページ
+├── countdownTimerPage.html # カウントダウンタイマー
+├── clockPrintPage.html     # 時計プリント（時間学習用）
+└── README.md
+```
+
+## 🛠️ 使用技術
+
+- HTML5 / CSS3 / JavaScript (jQuery)
+- Bootstrap 5.3
+
+
 ## 🌐 デモ
 
 https://velaciela-ringWing2007.github.io/
@@ -27,21 +43,6 @@ https://velaciela-ringWing2007.github.io/countdownTimerPage.html
   - 🔴 点滅: 15分未満
 - **設定のカスタマイズ** - JSON形式で自由にタイマーを編集可能
 - **設定の永続化** - Cookieに保存（1年間有効）
-
-## 📁 ファイル構成
-
-```
-.
-├── index.html              # トップページ
-├── countdownTimerPage.html # カウントダウンタイマー
-├── clockPrintPage.html     # 時計プリント（時間学習用）
-└── README.md
-```
-
-## 🛠️ 使用技術
-
-- HTML5 / CSS3 / JavaScript (jQuery)
-- Bootstrap 5.3
 
 ## ⚙️ 設定方法
 
