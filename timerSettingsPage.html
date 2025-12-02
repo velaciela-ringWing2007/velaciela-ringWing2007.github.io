@@ -393,16 +393,51 @@ $(document).ready(function() {
         setupEventListeners();
     }
 
+    // targetTimeのフォーマットを検証・修正
+    function validateTargetTime(targetTime) {
+        if (typeof targetTime !== 'string') return null;
+
+        // 特定日時 (2024-01-01T00:00:00)
+        if (targetTime.includes('T')) return targetTime;
+        // 毎週 (W135-09:00:00)
+        if (targetTime.startsWith('W')) return targetTime;
+        // 毎月 (D25-00:00:00)
+        if (targetTime.startsWith('D')) return targetTime;
+
+        // 毎日 (HH:MM:SS) - コロンが2つ以外は不正
+        const parts = targetTime.split(':');
+        if (parts.length === 3) {
+            return targetTime; // 正常
+        } else if (parts.length === 4) {
+            // "21:00:00:00" のような誤りを "21:00:00" に修正
+            return parts.slice(0, 3).join(':');
+        }
+        return null; // 不正な形式
+    }
+
     // 旧形式（配列）から新形式への変換
     function migrateOldFormat(data) {
         if (Array.isArray(data)) {
             // 旧形式: 配列の場合は新形式に変換
-            return {
+            // 有効なタイマーのみをフィルタリング＆修正
+            const validTimers = data
+                .filter(t => t && typeof t.title === 'string' && typeof t.targetTime === 'string')
+                .map(t => ({
+                    title: t.title,
+                    targetTime: validateTargetTime(t.targetTime)
+                }))
+                .filter(t => t.targetTime !== null);
+
+            const migrated = {
                 active: 0,
                 groups: [
-                    { name: "デフォルト", timers: data }
+                    { name: "Timer1", timers: validTimers }
                 ]
             };
+            // マイグレーション後は即座に保存して次回から新形式で読み込まれるようにする
+            saveSettingsToCookie(migrated);
+            console.log('Timer settings migrated from old format to new format', migrated);
+            return migrated;
         }
         // 新形式: そのまま返す
         return data;
@@ -789,15 +824,21 @@ $(document).ready(function() {
                         alert('インポートが完了しました！\n「保存」ボタンを押すとCookieに保存されます。');
                     }
                 } else if (Array.isArray(imported)) {
-                    // 旧形式
-                    imported.forEach((item, index) => {
-                        if (!item.title || !item.targetTime) {
-                            throw new Error(`項目${index + 1}に title または targetTime がありません`);
-                        }
-                    });
+                    // 旧形式 - validateTargetTimeで修正も行う
+                    const validTimers = imported
+                        .filter(item => item && typeof item.title === 'string' && typeof item.targetTime === 'string')
+                        .map(item => ({
+                            title: item.title,
+                            targetTime: validateTargetTime(item.targetTime)
+                        }))
+                        .filter(item => item.targetTime !== null);
 
-                    if (confirm(`${imported.length}件のタイマーを現在のグループにインポートします。現在のグループのタイマーは上書きされます。よろしいですか？`)) {
-                        timerList = imported;
+                    if (validTimers.length === 0) {
+                        throw new Error('有効なタイマーがありません');
+                    }
+
+                    if (confirm(`${validTimers.length}件のタイマーを現在のグループにインポートします。現在のグループのタイマーは上書きされます。よろしいですか？`)) {
+                        timerList = validTimers;
                         renderTimerList();
                         updateJsonTextarea();
                         alert('インポートが完了しました！\n「保存」ボタンを押すとCookieに保存されます。');
