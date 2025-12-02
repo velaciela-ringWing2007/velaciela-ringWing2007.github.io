@@ -42,6 +42,23 @@
         .timer-item.dragging {
             opacity: 0.5;
         }
+        .drop-zone {
+            border: 2px dashed #dee2e6;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            color: #6c757d;
+            transition: all 0.3s;
+        }
+        .drop-zone.dragover {
+            border-color: #0d6efd;
+            background-color: #e7f1ff;
+            color: #0d6efd;
+        }
+        .drop-zone-icon {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 <body>
@@ -95,6 +112,50 @@
                 <a href="countdownTimerPage.html" class="btn btn-outline-primary">
                     タイマー画面へ
                 </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- エクスポート/インポート -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">設定のバックアップ</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3 mb-md-0">
+                            <h6>エクスポート</h6>
+                            <p class="text-muted small">現在の設定をJSONファイルとしてダウンロードします。</p>
+                            <button type="button" class="btn btn-outline-primary" id="exportBtn">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-download" viewBox="0 0 16 16">
+                                    <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"/>
+                                    <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z"/>
+                                </svg>
+                                設定をダウンロード
+                            </button>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>インポート</h6>
+                            <p class="text-muted small">JSONファイルをドラッグ&ドロップまたは選択して読み込みます。</p>
+                            <div class="drop-zone" id="dropZone">
+                                <div class="drop-zone-icon">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="currentColor" class="bi bi-upload" viewBox="0 0 16 16">
+                                        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"/>
+                                        <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708z"/>
+                                    </svg>
+                                </div>
+                                <div>ここにJSONファイルをドロップ</div>
+                                <div class="mt-2">または</div>
+                                <label class="btn btn-outline-secondary btn-sm mt-2">
+                                    ファイルを選択
+                                    <input type="file" id="fileInput" accept=".json" style="display: none;">
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -463,6 +524,98 @@ $(document).ready(function() {
 
         // JSON更新
         $('#refreshJsonBtn').on('click', updateJsonTextarea);
+
+        // エクスポート
+        $('#exportBtn').on('click', exportSettings);
+
+        // インポート（ファイル選択）
+        $('#fileInput').on('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                importFromFile(file);
+            }
+        });
+
+        // ドラッグ&ドロップ
+        const dropZone = document.getElementById('dropZone');
+
+        dropZone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.classList.remove('dragover');
+
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                importFromFile(files[0]);
+            }
+        });
+    }
+
+    // エクスポート機能
+    function exportSettings() {
+        const dataStr = JSON.stringify(timerList, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+
+        const now = new Date();
+        const dateStr = now.toISOString().slice(0, 10);
+        const filename = `timer-settings-${dateStr}.json`;
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    // インポート機能
+    function importFromFile(file) {
+        if (!file.name.endsWith('.json')) {
+            alert('JSONファイルを選択してください');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const imported = JSON.parse(e.target.result);
+
+                if (!Array.isArray(imported)) {
+                    throw new Error('設定は配列形式である必要があります');
+                }
+
+                // 簡易バリデーション
+                imported.forEach((item, index) => {
+                    if (!item.title || !item.targetTime) {
+                        throw new Error(`項目${index + 1}に title または targetTime がありません`);
+                    }
+                });
+
+                if (confirm(`${imported.length}件の設定をインポートします。現在の設定は上書きされます。よろしいですか？`)) {
+                    timerList = imported;
+                    renderTimerList();
+                    updateJsonTextarea();
+                    alert('インポートが完了しました！\n「保存」ボタンを押すとCookieに保存されます。');
+                }
+            } catch (err) {
+                alert('ファイルの読み込みに失敗しました: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
     }
 
     function showTimerSettings(type) {
