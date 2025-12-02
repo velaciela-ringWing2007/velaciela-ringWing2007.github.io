@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>時計プリント - 時間学習用</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+    <style>
+        body {
+            margin: 20px;
+        }
+
+        .clock-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .clock-svg {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .settings-panel {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .color-preview {
+            width: 30px;
+            height: 30px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        /* 印刷時の設定 */
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+
+            .clock-container {
+                padding: 0;
+                margin: 0;
+            }
+
+            .clock-svg {
+                width: 100%;
+                height: auto;
+                max-height: 95vh;
+            }
+
+            body {
+                margin: 0;
+                padding: 0;
+            }
+
+            @page {
+                size: A4;
+                margin: 10mm;
+            }
+        }
+
+        .time-input {
+            width: 80px;
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .time-separator {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin: 0 5px;
+        }
+
+        .number-label {
+            font-family: 'Arial Rounded MT Bold', 'Hiragino Maru Gothic Pro', sans-serif;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- 設定パネル（印刷時は非表示） -->
+    <div class="settings-panel no-print">
+        <h4 class="mb-3">⏰ 時計プリント - 時間学習用</h4>
+        
+        <!-- 時刻設定 -->
+        <div class="row mb-3">
+            <div class="col-12">
+                <label class="form-label fw-bold">表示する時刻</label>
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                    <input type="number" id="hourInput" class="form-control time-input" min="0" max="12" value="10">
+                    <span class="time-separator">:</span>
+                    <input type="number" id="minuteInput" class="form-control time-input" min="0" max="59" value="10">
+                    <span class="time-separator">:</span>
+                    <input type="number" id="secondInput" class="form-control time-input" min="0" max="59" value="0">
+                    <button class="btn btn-outline-secondary btn-sm" id="nowBtn">現在時刻</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 色設定 -->
+        <div class="row mb-3">
+            <div class="col-md-4 col-6 mb-2">
+                <label class="form-label">短針（時）の色</label>
+                <div class="d-flex align-items-center gap-2">
+                    <input type="color" id="hourColor" class="form-control form-control-color" value="#dc3545">
+                    <span class="color-preview" id="hourColorPreview" style="background-color: #dc3545;"></span>
+                </div>
+            </div>
+            <div class="col-md-4 col-6 mb-2">
+                <label class="form-label">長針（分）の色</label>
+                <div class="d-flex align-items-center gap-2">
+                    <input type="color" id="minuteColor" class="form-control form-control-color" value="#0d6efd">
+                    <span class="color-preview" id="minuteColorPreview" style="background-color: #0d6efd;"></span>
+                </div>
+            </div>
+            <div class="col-md-4 col-6 mb-2">
+                <label class="form-label">秒針の色</label>
+                <div class="d-flex align-items-center gap-2">
+                    <input type="color" id="secondColor" class="form-control form-control-color" value="#198754">
+                    <span class="color-preview" id="secondColorPreview" style="background-color: #198754;"></span>
+                    <div class="form-check ms-2">
+                        <input class="form-check-input" type="checkbox" id="showSecond" checked>
+                        <label class="form-check-label" for="showSecond">表示</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- オプション -->
+        <div class="row mb-3">
+            <div class="col-12">
+                <label class="form-label fw-bold">表示オプション</label>
+                <div class="d-flex flex-wrap gap-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="showNumbers" checked>
+                        <label class="form-check-label" for="showNumbers">数字を表示</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="showMinuteMarks" checked>
+                        <label class="form-check-label" for="showMinuteMarks">分の目盛りを表示</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="showDigitalTime">
+                        <label class="form-check-label" for="showDigitalTime">デジタル時刻を表示</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ボタン -->
+        <div class="row">
+            <div class="col-12">
+                <button class="btn btn-primary btn-lg" id="printBtn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-printer me-2" viewBox="0 0 16 16">
+                        <path d="M2.5 8a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1z"/>
+                        <path d="M5 1a2 2 0 0 0-2 2v2H2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1v1a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-1h1a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1V3a2 2 0 0 0-2-2H5zM4 3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2H4V3zm1 5a2 2 0 0 0-2 2v1H2a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v-1a2 2 0 0 0-2-2H5zm7 2v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1z"/>
+                    </svg>
+                    印刷する
+                </button>
+                <a href="index.html" class="btn btn-outline-secondary btn-lg ms-2">戻る</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 時計表示エリア -->
+    <div class="clock-container">
+        <svg id="clockSvg" class="clock-svg" viewBox="0 0 400 440" width="400" height="440">
+            <!-- 時計の外枠 -->
+            <circle cx="200" cy="200" r="190" fill="white" stroke="#333" stroke-width="4"/>
+            
+            <!-- 目盛りと数字はJSで描画 -->
+            <g id="marks"></g>
+            <g id="numbers"></g>
+            
+            <!-- 針 -->
+            <g id="hands">
+                <!-- 時針（短針） -->
+                <line id="hourHand" x1="200" y1="200" x2="200" y2="90" 
+                      stroke="#dc3545" stroke-width="10" stroke-linecap="round"/>
+                <!-- 分針（長針） -->
+                <line id="minuteHand" x1="200" y1="200" x2="200" y2="50" 
+                      stroke="#0d6efd" stroke-width="6" stroke-linecap="round"/>
+                <!-- 秒針 -->
+                <line id="secondHand" x1="200" y1="200" x2="200" y2="40" 
+                      stroke="#198754" stroke-width="2" stroke-linecap="round"/>
+            </g>
+            
+            <!-- 中心の丸 -->
+            <circle cx="200" cy="200" r="10" fill="#333"/>
+            
+            <!-- デジタル時刻表示 -->
+            <text id="digitalTime" x="200" y="420" text-anchor="middle" 
+                  font-size="32" font-family="monospace" font-weight="bold" fill="#333"
+                  style="display: none;"></text>
+        </svg>
+    </div>
+</div>
+
+<script>
+    // DOM要素の取得
+    const hourInput = document.getElementById('hourInput');
+    const minuteInput = document.getElementById('minuteInput');
+    const secondInput = document.getElementById('secondInput');
+    const hourColor = document.getElementById('hourColor');
+    const minuteColor = document.getElementById('minuteColor');
+    const secondColor = document.getElementById('secondColor');
+    const showSecond = document.getElementById('showSecond');
+    const showNumbers = document.getElementById('showNumbers');
+    const showMinuteMarks = document.getElementById('showMinuteMarks');
+    const showDigitalTime = document.getElementById('showDigitalTime');
+    const printBtn = document.getElementById('printBtn');
+    const nowBtn = document.getElementById('nowBtn');
+
+    // SVG要素
+    const hourHand = document.getElementById('hourHand');
+    const minuteHand = document.getElementById('minuteHand');
+    const secondHand = document.getElementById('secondHand');
+    const marksGroup = document.getElementById('marks');
+    const numbersGroup = document.getElementById('numbers');
+    const digitalTime = document.getElementById('digitalTime');
+
+    // 目盛りを描画
+    function drawMarks() {
+        marksGroup.innerHTML = '';
+        const cx = 200, cy = 200, r = 175;
+        
+        for (let i = 0; i < 60; i++) {
+            const angle = (i * 6 - 90) * Math.PI / 180;
+            const isHour = i % 5 === 0;
+            
+            if (!showMinuteMarks.checked && !isHour) continue;
+            
+            const innerR = isHour ? r - 20 : r - 10;
+            const x1 = cx + innerR * Math.cos(angle);
+            const y1 = cy + innerR * Math.sin(angle);
+            const x2 = cx + r * Math.cos(angle);
+            const y2 = cy + r * Math.sin(angle);
+            
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', x1);
+            line.setAttribute('y1', y1);
+            line.setAttribute('x2', x2);
+            line.setAttribute('y2', y2);
+            line.setAttribute('stroke', '#333');
+            line.setAttribute('stroke-width', isHour ? 4 : 2);
+            marksGroup.appendChild(line);
+        }
+    }
+
+    // 数字を描画
+    function drawNumbers() {
+        numbersGroup.innerHTML = '';
+        if (!showNumbers.checked) return;
+        
+        const cx = 200, cy = 200, r = 145;
+        
+        for (let i = 1; i <= 12; i++) {
+            const angle = (i * 30 - 90) * Math.PI / 180;
+            const x = cx + r * Math.cos(angle);
+            const y = cy + r * Math.sin(angle);
+            
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', x);
+            text.setAttribute('y', y);
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('dominant-baseline', 'central');
+            text.setAttribute('font-size', '28');
+            text.setAttribute('font-weight', 'bold');
+            text.setAttribute('fill', '#333');
+            text.setAttribute('class', 'number-label');
+            text.textContent = i;
+            numbersGroup.appendChild(text);
+        }
+    }
+
+    // 針の位置を更新
+    function updateHands() {
+        let hour = parseInt(hourInput.value) || 0;
+        let minute = parseInt(minuteInput.value) || 0;
+        let second = parseInt(secondInput.value) || 0;
+        
+        // 値の正規化
+        hour = Math.max(0, Math.min(12, hour));
+        minute = Math.max(0, Math.min(59, minute));
+        second = Math.max(0, Math.min(59, second));
+        
+        // 角度計算（12時が0度、時計回り）
+        const hourAngle = (hour % 12 + minute / 60) * 30;
+        const minuteAngle = (minute + second / 60) * 6;
+        const secondAngle = second * 6;
+        
+        // 針の終点座標を計算
+        const cx = 200, cy = 200;
+        const hourLength = 110;
+        const minuteLength = 150;
+        const secondLength = 160;
+        
+        const hourRad = (hourAngle - 90) * Math.PI / 180;
+        const minuteRad = (minuteAngle - 90) * Math.PI / 180;
+        const secondRad = (secondAngle - 90) * Math.PI / 180;
+        
+        hourHand.setAttribute('x2', cx + hourLength * Math.cos(hourRad));
+        hourHand.setAttribute('y2', cy + hourLength * Math.sin(hourRad));
+        
+        minuteHand.setAttribute('x2', cx + minuteLength * Math.cos(minuteRad));
+        minuteHand.setAttribute('y2', cy + minuteLength * Math.sin(minuteRad));
+        
+        secondHand.setAttribute('x2', cx + secondLength * Math.cos(secondRad));
+        secondHand.setAttribute('y2', cy + secondLength * Math.sin(secondRad));
+        
+        // デジタル時刻更新
+        const hourStr = String(hour).padStart(2, '0');
+        const minStr = String(minute).padStart(2, '0');
+        const secStr = String(second).padStart(2, '0');
+        digitalTime.textContent = `${hourStr}:${minStr}:${secStr}`;
+    }
+
+    // 色を更新
+    function updateColors() {
+        hourHand.setAttribute('stroke', hourColor.value);
+        minuteHand.setAttribute('stroke', minuteColor.value);
+        secondHand.setAttribute('stroke', secondColor.value);
+        
+        document.getElementById('hourColorPreview').style.backgroundColor = hourColor.value;
+        document.getElementById('minuteColorPreview').style.backgroundColor = minuteColor.value;
+        document.getElementById('secondColorPreview').style.backgroundColor = secondColor.value;
+    }
+
+    // 秒針の表示/非表示
+    function updateSecondVisibility() {
+        secondHand.style.display = showSecond.checked ? '' : 'none';
+    }
+
+    // デジタル時刻の表示/非表示
+    function updateDigitalVisibility() {
+        digitalTime.style.display = showDigitalTime.checked ? '' : 'none';
+    }
+
+    // 現在時刻を設定
+    function setCurrentTime() {
+        const now = new Date();
+        hourInput.value = now.getHours() % 12 || 12;
+        minuteInput.value = now.getMinutes();
+        secondInput.value = now.getSeconds();
+        updateHands();
+    }
+
+    // 入力値の正規化
+    function normalizeInput(input, min, max) {
+        let value = parseInt(input.value) || 0;
+        if (value < min) value = min;
+        if (value > max) value = max;
+        input.value = value;
+    }
+
+    // イベントリスナー
+    hourInput.addEventListener('input', () => {
+        normalizeInput(hourInput, 0, 12);
+        updateHands();
+    });
+    minuteInput.addEventListener('input', () => {
+        normalizeInput(minuteInput, 0, 59);
+        updateHands();
+    });
+    secondInput.addEventListener('input', () => {
+        normalizeInput(secondInput, 0, 59);
+        updateHands();
+    });
+
+    hourColor.addEventListener('input', updateColors);
+    minuteColor.addEventListener('input', updateColors);
+    secondColor.addEventListener('input', updateColors);
+    
+    showSecond.addEventListener('change', updateSecondVisibility);
+    showNumbers.addEventListener('change', drawNumbers);
+    showMinuteMarks.addEventListener('change', drawMarks);
+    showDigitalTime.addEventListener('change', updateDigitalVisibility);
+    
+    nowBtn.addEventListener('click', setCurrentTime);
+    printBtn.addEventListener('click', () => window.print());
+
+    // 初期化
+    drawMarks();
+    drawNumbers();
+    updateHands();
+    updateColors();
+    updateSecondVisibility();
+    updateDigitalVisibility();
+</script>
+</body>
+</html>

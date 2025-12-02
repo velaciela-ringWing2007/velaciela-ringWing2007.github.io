@@ -1,10 +1,18 @@
-# 日々の残り時間 - カウントダウンタイマー
+# Nebukin's Tools
 
-日常の様々なイベントまでの残り時間をリアルタイムで表示するWebアプリケーションです。
+日常で使える便利なWebツール集です。
 
 ## 🌐 デモ
 
+https://velaciela-ringWing2007.github.io/
+
+---
+
+## ⏱️ 日々の残り時間 - カウントダウンタイマー
+
 https://velaciela-ringWing2007.github.io/countdownTimerPage.html
+
+日常の様々なイベントまでの残り時間をリアルタイムで表示します。
 
 ## ✨ 機能
 
@@ -25,7 +33,8 @@ https://velaciela-ringWing2007.github.io/countdownTimerPage.html
 ```
 .
 ├── index.html              # トップページ
-├── countdownTimerPage.html # カウントダウンタイマー本体
+├── countdownTimerPage.html # カウントダウンタイマー
+├── clockPrintPage.html     # 時計プリント（時間学習用）
 └── README.md
 ```
 
@@ -63,6 +72,36 @@ https://velaciela-ringWing2007.github.io/countdownTimerPage.html
 - Cookieを削除すると設定がリセットされます
 - 1年以上ページを開かないと設定の有効期限が切れます
 - タイトルに半角スペースを入れると動作が不安定になる場合があります
+
+---
+
+## 🕐 時計プリント - 時間学習用
+
+https://velaciela-ringWing2007.github.io/clockPrintPage.html
+
+子供に時間を教えるための、印刷可能なアナログ時計です。
+
+### ✨ 機能
+
+- **アナログ時計表示** - SVGで高品質な時計を描画
+- **時刻設定** - 時・分・秒を自由に設定可能
+- **針の色カスタマイズ** - カラーピッカーで短針・長針・秒針の色を変更
+- **表示オプション**
+  - 数字の表示/非表示
+  - 分の目盛りの表示/非表示
+  - 秒針の表示/非表示
+  - デジタル時刻の表示/非表示
+- **A4印刷対応** - 印刷ボタンでA4サイズに最適化して印刷
+
+### 🎨 デフォルト設定
+
+| 針 | 色 |
+|----|-----|
+| 短針（時） | 🔴 赤 |
+| 長針（分） | 🔵 青 |
+| 秒針 | 🟢 緑 |
+
+---
 
 ## 📜 ライセンス
 
