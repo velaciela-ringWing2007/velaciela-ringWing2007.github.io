@@ -650,6 +650,20 @@
             color: #20b2aa;
         }
 
+        /* 明るいテーマ共通 - ボタンの視認性向上 */
+        [data-theme="white"] .btn-outline-light,
+        [data-theme="pink"] .btn-outline-light,
+        [data-theme="aqua"] .btn-outline-light {
+            color: #495057;
+            border-color: #6c757d;
+        }
+        [data-theme="white"] .btn-outline-light:hover,
+        [data-theme="pink"] .btn-outline-light:hover,
+        [data-theme="aqua"] .btn-outline-light:hover {
+            background-color: #6c757d;
+            color: #fff;
+        }
+
         /* Midnight Purple テーマ */
         [data-theme="midnight"] .stat-card {
             box-shadow: 0 4px 20px rgba(124, 58, 237, 0.2);

@@ -25,11 +25,17 @@ const ThemeSwitcher = {
         { value: 'aqua', label: 'Pop Aqua' }
     ],
 
+    defaultTheme: 'dark',
+
     /**
      * 初期化
      * @param {string} selectId - テーマ選択セレクトボックスのID（デフォルト: 'themeSelect'）
+     * @param {string} defaultTheme - ページ固有のデフォルトテーマ（オプション）
      */
-    init: function(selectId = 'themeSelect') {
+    init: function(selectId = 'themeSelect', defaultTheme = null) {
+        if (defaultTheme) {
+            this.defaultTheme = defaultTheme;
+        }
         this.selectElement = document.getElementById(selectId);
 
         // セレクトボックスにオプションを追加（まだなければ）
@@ -66,7 +72,7 @@ const ThemeSwitcher = {
      * テーマを読み込んで適用
      */
     load: function() {
-        const savedTheme = localStorage.getItem(this.STORAGE_KEY) || 'dark';
+        const savedTheme = localStorage.getItem(this.STORAGE_KEY) || this.defaultTheme;
         this.apply(savedTheme);
 
         if (this.selectElement) {
@@ -96,7 +102,7 @@ const ThemeSwitcher = {
      * @returns {string} テーマ名
      */
     current: function() {
-        return localStorage.getItem(this.STORAGE_KEY) || 'dark';
+        return localStorage.getItem(this.STORAGE_KEY) || this.defaultTheme;
     },
 
     /**
