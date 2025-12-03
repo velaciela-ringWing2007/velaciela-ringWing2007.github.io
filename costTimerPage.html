@@ -261,10 +261,15 @@
         <div class="col">
             <div class="stat-card">
                 <h5 class="mb-3">クイック設定</h5>
-                <div class="row g-3">
+                <div class="row g-3 align-items-end">
                     <div class="col-md-4">
-                        <label class="form-label">予定時間（分）</label>
-                        <input type="number" class="form-control bg-dark text-light" id="plannedDuration" value="60" min="1">
+                        <label class="form-label">予定時間</label>
+                        <div class="d-flex align-items-center gap-2">
+                            <input type="number" class="form-control bg-dark text-light text-center" id="plannedHours" value="1" min="0" max="23" style="width: 70px;">
+                            <span>時間</span>
+                            <input type="number" class="form-control bg-dark text-light text-center" id="plannedMinutes" value="0" min="0" max="59" style="width: 70px;">
+                            <span>分</span>
+                        </div>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">参加者プリセット</label>
@@ -273,9 +278,19 @@
                         </select>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label">操作</label>
-                        <div>
-                            <button class="btn btn-outline-light btn-sm" id="applyPresetBtn">プリセット適用</button>
+                        <button class="btn btn-outline-light" id="applyPresetBtn">プリセット適用</button>
+                    </div>
+                </div>
+                <div class="row g-3 mt-2">
+                    <div class="col-12">
+                        <label class="form-label">よく使う時間</label>
+                        <div class="d-flex flex-wrap gap-2">
+                            <button class="btn btn-sm btn-outline-secondary quick-time-btn" data-minutes="15">15分</button>
+                            <button class="btn btn-sm btn-outline-secondary quick-time-btn" data-minutes="30">30分</button>
+                            <button class="btn btn-sm btn-outline-secondary quick-time-btn" data-minutes="45">45分</button>
+                            <button class="btn btn-sm btn-outline-secondary quick-time-btn" data-minutes="60">1時間</button>
+                            <button class="btn btn-sm btn-outline-secondary quick-time-btn" data-minutes="90">1.5時間</button>
+                            <button class="btn btn-sm btn-outline-secondary quick-time-btn" data-minutes="120">2時間</button>
                         </div>
                     </div>
                 </div>
@@ -311,8 +326,14 @@ $(document).ready(function() {
         setInterval(updateDisplay, 100);
         setupEventListeners();
 
-        // デフォルト参加者（設定がない場合）
-        if (settings.presets.length === 0) {
+        // 予定時間の初期値をstateに反映
+        state.plannedDuration = getPlannedDurationFromInputs();
+
+        // デフォルト参加者（プリセットがある場合は最初のを使う）
+        if (settings.presets.length > 0) {
+            state.participants = settings.presets[0].participants.map(p => ({ ...p }));
+            $('#presetSelect').val('0');
+        } else {
             state.participants = [
                 { name: "参加者1", hourlyRate: 5000 },
                 { name: "参加者2", hourlyRate: 5000 }
@@ -368,8 +389,29 @@ $(document).ready(function() {
         });
     }
 
+    function getPlannedDurationFromInputs() {
+        const hours = parseInt($('#plannedHours').val()) || 0;
+        const minutes = parseInt($('#plannedMinutes').val()) || 0;
+        return hours * 60 + minutes;
+    }
+
+    function setPlannedDurationInputs(totalMinutes) {
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        $('#plannedHours').val(hours);
+        $('#plannedMinutes').val(minutes);
+    }
+
     function updateEstimate() {
         const plannedMinutes = state.plannedDuration;
+
+        // 0分の場合はコスト0で固定
+        if (plannedMinutes <= 0) {
+            $('#estimatedCost').text('¥0');
+            $('#plannedEndTime').text('--:--');
+            return;
+        }
+
         const estimatedCost = (state.totalHourlyRate / 60) * plannedMinutes;
         $('#estimatedCost').text(formatCurrency(estimatedCost));
 
@@ -401,27 +443,33 @@ $(document).ready(function() {
         // 経過時間
         $('#elapsedTime').text(formatTime(elapsedSeconds));
 
-        // 残り時間
-        const remainingSeconds = plannedSeconds - elapsedSeconds;
-        if (remainingSeconds >= 0) {
-            $('#remainingTime').text(formatTime(remainingSeconds)).removeClass('over-time').addClass('remaining');
+        // 残り時間（予定0分の場合は常に超過扱い）
+        if (plannedSeconds <= 0) {
+            $('#remainingTime').text('--:--:--').removeClass('over-time remaining');
             $('#overTimeSection').hide();
+            $('#progressBar').css('width', '0%');
         } else {
-            $('#remainingTime').text('00:00:00').removeClass('remaining');
-            $('#overTimeSection').show();
-            $('#overTime').text(formatTime(Math.abs(remainingSeconds)));
-            const overCost = (state.totalHourlyRate / 3600) * Math.abs(remainingSeconds);
-            $('#overCost').text(formatCurrency(overCost));
-        }
+            const remainingSeconds = plannedSeconds - elapsedSeconds;
+            if (remainingSeconds >= 0) {
+                $('#remainingTime').text(formatTime(remainingSeconds)).removeClass('over-time').addClass('remaining');
+                $('#overTimeSection').hide();
+            } else {
+                $('#remainingTime').text('00:00:00').removeClass('remaining');
+                $('#overTimeSection').show();
+                $('#overTime').text(formatTime(Math.abs(remainingSeconds)));
+                const overCost = (state.totalHourlyRate / 3600) * Math.abs(remainingSeconds);
+                $('#overCost').text(formatCurrency(overCost));
+            }
 
-        // プログレスバー
-        const progress = Math.min((elapsedSeconds / plannedSeconds) * 100, 100);
-        const $progressBar = $('#progressBar');
-        $progressBar.css('width', progress + '%');
-        if (elapsedSeconds > plannedSeconds) {
-            $progressBar.removeClass('progress-elapsed').addClass('progress-over');
-        } else {
-            $progressBar.removeClass('progress-over').addClass('progress-elapsed');
+            // プログレスバー
+            const progress = Math.min((elapsedSeconds / plannedSeconds) * 100, 100);
+            const $progressBar = $('#progressBar');
+            $progressBar.css('width', progress + '%');
+            if (elapsedSeconds > plannedSeconds) {
+                $progressBar.removeClass('progress-elapsed').addClass('progress-over');
+            } else {
+                $progressBar.removeClass('progress-over').addClass('progress-elapsed');
+            }
         }
 
         // 現在のコスト
@@ -451,7 +499,7 @@ $(document).ready(function() {
             state.status = 'running';
             state.startTime = new Date();
             state.pausedTime = 0;
-            state.plannedDuration = parseInt($('#plannedDuration').val()) || 60;
+            state.plannedDuration = getPlannedDurationFromInputs();
 
             $('#startBtn').hide();
             $('#pauseBtn').show();
@@ -530,16 +578,43 @@ $(document).ready(function() {
             updateEstimate();
         });
 
-        $('#plannedDuration').on('change', function() {
-            state.plannedDuration = parseInt($(this).val()) || 60;
+        // 予定時間の変更
+        $('#plannedHours, #plannedMinutes').on('change', function() {
+            state.plannedDuration = getPlannedDurationFromInputs();
             updateEstimate();
         });
 
+        // よく使う時間ボタン
+        $('.quick-time-btn').on('click', function() {
+            const minutes = parseInt($(this).data('minutes'));
+            state.plannedDuration = minutes;
+            setPlannedDurationInputs(minutes);
+            updateEstimate();
+        });
+
+        // プリセット適用
         $('#applyPresetBtn').on('click', function() {
             const index = $('#presetSelect').val();
+            if (index === '') {
+                alert('プリセットを選択してください');
+                return;
+            }
+
+            const preset = settings.presets[parseInt(index)];
+            if (preset) {
+                state.participants = preset.participants.map(p => ({ ...p }));
+                calculateTotalRate();
+                renderParticipants();
+                updateEstimate();
+            }
+        });
+
+        // プリセット選択時に自動適用
+        $('#presetSelect').on('change', function() {
+            const index = $(this).val();
             if (index === '') return;
 
-            const preset = settings.presets[index];
+            const preset = settings.presets[parseInt(index)];
             if (preset) {
                 state.participants = preset.participants.map(p => ({ ...p }));
                 calculateTotalRate();
