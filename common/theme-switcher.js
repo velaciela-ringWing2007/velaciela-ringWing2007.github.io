@@ -13,7 +13,7 @@ const ThemeSwitcher = {
 
     themes: [
         { value: 'white', label: 'White' },
-        { value: 'default', label: 'Default' },
+        { value: 'dark', label: 'Dark' },
         { value: 'terminal', label: 'Terminal Green' },
         { value: 'nerv', label: 'NERV Orange' },
         { value: 'neon', label: 'Neon Cyber' },
@@ -66,7 +66,7 @@ const ThemeSwitcher = {
      * テーマを読み込んで適用
      */
     load: function() {
-        const savedTheme = localStorage.getItem(this.STORAGE_KEY) || 'default';
+        const savedTheme = localStorage.getItem(this.STORAGE_KEY) || 'dark';
         this.apply(savedTheme);
 
         if (this.selectElement) {
@@ -96,7 +96,7 @@ const ThemeSwitcher = {
      * @returns {string} テーマ名
      */
     current: function() {
-        return localStorage.getItem(this.STORAGE_KEY) || 'default';
+        return localStorage.getItem(this.STORAGE_KEY) || 'dark';
     },
 
     /**

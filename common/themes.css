@@ -42,8 +42,8 @@
     --scanline: none;
 }
 
-/* デフォルトテーマ */
-:root, [data-theme="default"] {
+/* Dark - ダークブルー */
+:root, [data-theme="dark"] {
     --bg-primary: #1a1a2e;
     --bg-card: #16213e;
     --bg-card-alt: #0f3460;

@@ -9,8 +9,41 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
         /* ===== テーマ定義 ===== */
-        /* デフォルトテーマ */
-        :root, [data-theme="default"] {
+        /* White - クラシック白背景 */
+        [data-theme="white"] {
+            --bg-primary: #f8f9fa;
+            --bg-card: #ffffff;
+            --bg-card-alt: #f1f3f5;
+            --bg-badge: #e9ecef;
+            --bg-progress: #dee2e6;
+            --text-primary: #212529;
+            --text-secondary: #495057;
+            --text-muted: #6c757d;
+            --color-elapsed: #198754;
+            --color-remaining: #0d6efd;
+            --color-overtime: #dc3545;
+            --color-cost: #fd7e14;
+            --color-estimate: #6f42c1;
+            --color-link: #0d6efd;
+            --color-link-hover: #0a58ca;
+            --btn-start: #198754;
+            --btn-start-hover: #157347;
+            --btn-pause: #ffc107;
+            --btn-pause-hover: #e0a800;
+            --btn-stop: #dc3545;
+            --btn-stop-hover: #bb2d3b;
+            --btn-reset: #6c757d;
+            --progress-gradient: linear-gradient(90deg, #198754, #20c997);
+            --progress-over-gradient: linear-gradient(90deg, #dc3545, #f8d7da);
+            --card-border: 1px solid #dee2e6;
+            --card-radius: 8px;
+            --font-display: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --glow-effect: none;
+            --scanline: none;
+        }
+
+        /* Dark - ダークブルー */
+        :root, [data-theme="dark"] {
             --bg-primary: #1a1a2e;
             --bg-card: #16213e;
             --bg-card-alt: #0f3460;
@@ -702,7 +735,8 @@
                 <h2>コストタイマー</h2>
                 <div class="d-flex gap-2 align-items-center">
                     <select class="form-select form-select-sm theme-selector" id="themeSelect" style="width: auto;">
-                        <option value="default">Default</option>
+                        <option value="white">White</option>
+                        <option value="dark">Dark</option>
                         <option value="terminal">Terminal Green</option>
                         <option value="nerv">NERV Orange</option>
                         <option value="neon">Neon Cyber</option>
@@ -1036,13 +1070,14 @@ $(document).ready(function() {
     }
 
     function loadTheme() {
-        const savedTheme = localStorage.getItem('costTimerTheme') || 'default';
+        // nebukinToolsTheme を共通で使用（カウントダウンタイマーと共有）
+        const savedTheme = localStorage.getItem('nebukinToolsTheme') || 'dark';
         document.body.setAttribute('data-theme', savedTheme);
         $('#themeSelect').val(savedTheme);
     }
 
     function saveTheme(theme) {
-        localStorage.setItem('costTimerTheme', theme);
+        localStorage.setItem('nebukinToolsTheme', theme);
         document.body.setAttribute('data-theme', theme);
     }
 
