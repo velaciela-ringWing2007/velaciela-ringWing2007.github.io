@@ -331,6 +331,25 @@
                     <span class="text-muted">合計時給:</span>
                     <span class="fs-4 fw-bold text-warning" id="modalTotalRate">¥0</span>/時
                 </div>
+                <!-- プリセット情報と注意書き -->
+                <div id="presetInfoSection" class="mt-3 p-3" style="background: #2d3748; border-radius: 8px; display: none;">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#ffc107" viewBox="0 0 16 16">
+                            <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>
+                            <path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0"/>
+                        </svg>
+                        <span class="text-warning" id="presetInfoText">プリセット「」を編集中</span>
+                    </div>
+                    <small class="text-muted d-block mb-2">
+                        ここでの変更は今回のセッションのみ有効です。プリセット自体は変更されません。
+                    </small>
+                    <button type="button" class="btn btn-sm btn-outline-warning" id="saveToPresetBtn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="me-1" viewBox="0 0 16 16">
+                            <path d="M2 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H9.5a1 1 0 0 0-1 1v7.293l2.646-2.647a.5.5 0 0 1 .708.708l-3.5 3.5a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L7.5 9.293V2a2 2 0 0 1 2-2H14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h2.5a.5.5 0 0 1 0 1z"/>
+                        </svg>
+                        プリセットに保存
+                    </button>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
@@ -374,6 +393,7 @@ $(document).ready(function() {
     // モーダル用の一時参加者リスト
     let tempParticipants = [];
     let participantsModal;
+    let currentPresetIndex = null; // 現在適用中のプリセットインデックス
 
     // 初期化
     function init() {
@@ -391,6 +411,7 @@ $(document).ready(function() {
         // デフォルト参加者（プリセットがある場合は最初のを使う）
         if (settings.presets.length > 0) {
             state.participants = settings.presets[0].participants.map(p => ({ ...p }));
+            currentPresetIndex = 0;
             $('#presetSelect').val('0');
         } else {
             state.participants = [
@@ -593,6 +614,22 @@ $(document).ready(function() {
         $('#modalTotalRate').text('¥' + total.toLocaleString());
     }
 
+    function updateModalPresetInfo() {
+        if (currentPresetIndex !== null && settings.presets[currentPresetIndex]) {
+            const presetName = settings.presets[currentPresetIndex].name;
+            $('#presetInfoText').text(`プリセット「${presetName}」を編集中`);
+            $('#presetInfoSection').show();
+        } else {
+            $('#presetInfoSection').hide();
+        }
+    }
+
+    function saveSettings() {
+        const expirationDate = new Date();
+        expirationDate.setFullYear(expirationDate.getFullYear() + 1);
+        document.cookie = `costTimerSettings=${encodeURIComponent(JSON.stringify(settings))}; expires=${expirationDate.toUTCString()}; path=/; SameSite=Lax; Secure`;
+    }
+
     function setupEventListeners() {
         $('#startBtn').on('click', function() {
             state.status = 'running';
@@ -702,6 +739,7 @@ $(document).ready(function() {
             const preset = settings.presets[parseInt(index)];
             if (preset) {
                 state.participants = preset.participants.map(p => ({ ...p }));
+                currentPresetIndex = parseInt(index);
                 calculateTotalRate();
                 renderParticipants();
                 updateEstimate();
@@ -711,11 +749,15 @@ $(document).ready(function() {
         // プリセット選択時に自動適用
         $('#presetSelect').on('change', function() {
             const index = $(this).val();
-            if (index === '') return;
+            if (index === '') {
+                currentPresetIndex = null;
+                return;
+            }
 
             const preset = settings.presets[parseInt(index)];
             if (preset) {
                 state.participants = preset.participants.map(p => ({ ...p }));
+                currentPresetIndex = parseInt(index);
                 calculateTotalRate();
                 renderParticipants();
                 updateEstimate();
@@ -726,6 +768,7 @@ $(document).ready(function() {
         $('#editParticipantsBtn').on('click', function() {
             tempParticipants = state.participants.map(p => ({ ...p }));
             renderModalParticipantList();
+            updateModalPresetInfo();
             participantsModal.show();
         });
 
@@ -771,6 +814,30 @@ $(document).ready(function() {
             renderParticipants();
             updateEstimate();
             participantsModal.hide();
+        });
+
+        // プリセットに保存（モーダル内）
+        $('#saveToPresetBtn').on('click', function() {
+            if (currentPresetIndex === null || !settings.presets[currentPresetIndex]) {
+                alert('プリセットが選択されていません');
+                return;
+            }
+
+            const validParticipants = tempParticipants.filter(p => p.name.trim());
+            if (validParticipants.length === 0) {
+                alert('参加者を1名以上追加してください');
+                return;
+            }
+
+            const presetName = settings.presets[currentPresetIndex].name;
+            if (confirm(`プリセット「${presetName}」を上書き保存しますか？`)) {
+                settings.presets[currentPresetIndex].participants = validParticipants.map(p => ({
+                    name: p.name.trim(),
+                    hourlyRate: p.hourlyRate || 0
+                }));
+                saveSettings();
+                alert(`プリセット「${presetName}」を保存しました`);
+            }
         });
     }
 
