@@ -129,7 +129,14 @@
     <div class="row mb-3">
         <div class="col">
             <div class="stat-card">
-                <div class="stat-label">参加者 (<span id="participantCount">0</span>名) - 合計単価: <span id="totalHourlyRate">¥0</span>/時</div>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div class="stat-label mb-0">参加者 (<span id="participantCount">0</span>名) - 合計単価: <span id="totalHourlyRate">¥0</span>/時</div>
+                    <button class="btn btn-sm btn-outline-light" id="editParticipantsBtn" title="参加者を編集">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/>
+                        </svg>
+                    </button>
+                </div>
                 <div id="participantList"></div>
             </div>
         </div>
@@ -299,6 +306,42 @@
     </div>
 </div>
 
+<!-- 参加者編集モーダル -->
+<div class="modal fade" id="participantsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark text-light">
+            <div class="modal-header">
+                <h5 class="modal-title">参加者を編集</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label mb-0">参加者一覧</label>
+                        <button type="button" class="btn btn-sm btn-success" id="addParticipantBtn">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-plus-lg" viewBox="0 0 16 16">
+                                <path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2"/>
+                            </svg>
+                            追加
+                        </button>
+                    </div>
+                    <div id="modalParticipantList"></div>
+                </div>
+                <div class="text-center p-3" style="background: #16213e; border-radius: 8px;">
+                    <span class="text-muted">合計時給:</span>
+                    <span class="fs-4 fw-bold text-warning" id="modalTotalRate">¥0</span>/時
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-primary" id="saveParticipantsBtn">適用</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
 <script>
 $(document).ready(function() {
     // 状態管理
@@ -317,10 +360,15 @@ $(document).ready(function() {
         presets: []
     };
 
+    // モーダル用の一時参加者リスト
+    let tempParticipants = [];
+    let participantsModal;
+
     // 初期化
     function init() {
         loadSettings();
         renderPresets();
+        participantsModal = new bootstrap.Modal(document.getElementById('participantsModal'));
         updateCurrentTime();
         setInterval(updateCurrentTime, 1000);
         setInterval(updateDisplay, 100);
@@ -494,6 +542,46 @@ $(document).ready(function() {
         return div.innerHTML;
     }
 
+    // モーダル用参加者リスト描画
+    function renderModalParticipantList() {
+        const $list = $('#modalParticipantList');
+        $list.empty();
+
+        if (tempParticipants.length === 0) {
+            $list.append('<div class="text-center text-muted py-3">参加者がいません</div>');
+            updateModalTotalRate();
+            return;
+        }
+
+        tempParticipants.forEach((p, index) => {
+            $list.append(`
+                <div class="d-flex align-items-center gap-2 mb-2 p-2" style="background: #2d3748; border-radius: 6px;">
+                    <input type="text" class="form-control form-control-sm bg-secondary text-light modal-participant-name"
+                           value="${escapeHtml(p.name)}" placeholder="名前" data-index="${index}" style="flex: 1;">
+                    <div class="input-group input-group-sm" style="width: 150px;">
+                        <span class="input-group-text bg-secondary text-light">¥</span>
+                        <input type="number" class="form-control bg-secondary text-light modal-participant-rate"
+                               value="${p.hourlyRate}" min="0" step="100" data-index="${index}">
+                        <span class="input-group-text bg-secondary text-light">/h</span>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-danger remove-modal-participant-btn" data-index="${index}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                            <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                        </svg>
+                    </button>
+                </div>
+            `);
+        });
+
+        updateModalTotalRate();
+    }
+
+    function updateModalTotalRate() {
+        const total = tempParticipants.reduce((sum, p) => sum + (p.hourlyRate || 0), 0);
+        $('#modalTotalRate').text('¥' + total.toLocaleString());
+    }
+
     function setupEventListeners() {
         $('#startBtn').on('click', function() {
             state.status = 'running';
@@ -621,6 +709,57 @@ $(document).ready(function() {
                 renderParticipants();
                 updateEstimate();
             }
+        });
+
+        // 参加者編集モーダルを開く
+        $('#editParticipantsBtn').on('click', function() {
+            tempParticipants = state.participants.map(p => ({ ...p }));
+            renderModalParticipantList();
+            participantsModal.show();
+        });
+
+        // 参加者追加（モーダル内）
+        $('#addParticipantBtn').on('click', function() {
+            tempParticipants.push({ name: '', hourlyRate: 5000 });
+            renderModalParticipantList();
+        });
+
+        // 参加者削除（モーダル内）
+        $(document).on('click', '.remove-modal-participant-btn', function() {
+            const index = parseInt($(this).data('index'));
+            tempParticipants.splice(index, 1);
+            renderModalParticipantList();
+        });
+
+        // 参加者名変更（モーダル内）
+        $(document).on('input', '.modal-participant-name', function() {
+            const index = parseInt($(this).data('index'));
+            tempParticipants[index].name = $(this).val();
+        });
+
+        // 参加者単価変更（モーダル内）
+        $(document).on('input', '.modal-participant-rate', function() {
+            const index = parseInt($(this).data('index'));
+            tempParticipants[index].hourlyRate = parseInt($(this).val()) || 0;
+            updateModalTotalRate();
+        });
+
+        // 参加者を適用（モーダル内）
+        $('#saveParticipantsBtn').on('click', function() {
+            // 空の名前をフィルタリング
+            const validParticipants = tempParticipants.filter(p => p.name.trim());
+            if (validParticipants.length === 0) {
+                alert('参加者を1名以上追加してください');
+                return;
+            }
+            state.participants = validParticipants.map(p => ({
+                name: p.name.trim(),
+                hourlyRate: p.hourlyRate || 0
+            }));
+            calculateTotalRate();
+            renderParticipants();
+            updateEstimate();
+            participantsModal.hide();
         });
     }
 
