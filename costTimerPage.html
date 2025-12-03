@@ -355,10 +355,21 @@ $(document).ready(function() {
         totalHourlyRate: 0
     };
 
-    // 設定データ
-    let settings = {
-        presets: []
+    // 設定データ（デフォルトプリセット付き）
+    const defaultSettings = {
+        presets: [
+            {
+                name: "定例MTG（3名）",
+                participants: [
+                    { name: "マネージャー", hourlyRate: 6000 },
+                    { name: "エンジニア1", hourlyRate: 4000 },
+                    { name: "エンジニア2", hourlyRate: 4000 }
+                ]
+            }
+        ]
     };
+
+    let settings = JSON.parse(JSON.stringify(defaultSettings));
 
     // モーダル用の一時参加者リスト
     let tempParticipants = [];
