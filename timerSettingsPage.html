@@ -918,17 +918,31 @@ $(document).ready(function() {
         updatePreview();
     }
 
+    // 時刻を HH:MM:SS 形式に正規化
+    function normalizeTime(timeVal, defaultVal = '09:00') {
+        if (!timeVal) timeVal = defaultVal;
+        const parts = timeVal.split(':');
+        if (parts.length === 2) {
+            // HH:MM -> HH:MM:00
+            return timeVal + ':00';
+        } else if (parts.length === 3) {
+            // HH:MM:SS そのまま
+            return timeVal;
+        }
+        return defaultVal + ':00';
+    }
+
     function updatePreview() {
         const type = $('input[name="timerType"]:checked').val();
         let targetTime = '';
 
         switch (type) {
             case 'daily':
-                targetTime = ($('#dailyTime').val() || '09:00') + ':00';
+                targetTime = normalizeTime($('#dailyTime').val(), '09:00');
                 break;
             case 'once':
                 const date = $('#onceDate').val() || getTodayString();
-                const time = ($('#onceTime').val() || '00:00') + ':00';
+                const time = normalizeTime($('#onceTime').val(), '00:00');
                 targetTime = `${date}T${time}`;
                 break;
             case 'weekly':
@@ -936,12 +950,12 @@ $(document).ready(function() {
                 $('[id^="weekday"]:checked').each(function() {
                     days.push($(this).val());
                 });
-                const weeklyTime = ($('#weeklyTime').val() || '09:00') + ':00';
+                const weeklyTime = normalizeTime($('#weeklyTime').val(), '09:00');
                 targetTime = `W${days.join('')}-${weeklyTime}`;
                 break;
             case 'monthly':
                 const day = $('#monthlyDay').val() || '1';
-                const monthlyTime = ($('#monthlyTime').val() || '00:00') + ':00';
+                const monthlyTime = normalizeTime($('#monthlyTime').val(), '00:00');
                 targetTime = `D${day}-${monthlyTime}`;
                 break;
         }
