@@ -12,6 +12,7 @@ const ThemeSwitcher = {
     STORAGE_KEY: 'nebukinToolsTheme',
 
     themes: [
+        { value: 'white', label: 'White' },
         { value: 'default', label: 'Default' },
         { value: 'terminal', label: 'Terminal Green' },
         { value: 'nerv', label: 'NERV Orange' },
