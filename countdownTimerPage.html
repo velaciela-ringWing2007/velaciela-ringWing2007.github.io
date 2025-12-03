@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="common/themes.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
+        /* ===== カウントダウンタイマー固有スタイル ===== */
         body {
             margin: 30px 10px;
             background: var(--bg-primary);
@@ -62,62 +63,18 @@
             color: var(--text-primary);
         }
 
-        .form-select {
-            background-color: var(--bg-input);
-            color: var(--text-primary);
-            border-color: var(--border-color);
-        }
-
-        .form-select:focus {
-            background-color: var(--bg-input);
-            color: var(--text-primary);
-            border-color: var(--accent-color);
-            box-shadow: 0 0 0 0.25rem rgba(var(--accent-rgb), 0.25);
-        }
-
-        .form-select option {
-            background-color: var(--bg-card);
-            color: var(--text-primary);
-        }
-
         .note-text {
             color: var(--text-muted);
         }
 
-        .breadcrumb {
-            background: transparent;
-        }
-
-        .breadcrumb-item a {
-            color: var(--text-secondary);
-        }
-
-        .breadcrumb-item a:hover {
-            color: var(--text-primary);
-        }
-
-        .breadcrumb-item.active {
-            color: var(--text-muted);
-        }
-
-        .breadcrumb-item + .breadcrumb-item::before {
-            color: var(--text-muted);
-        }
-
         @keyframes blink {
-            25% {
-                opacity: 1;
-            }
-            50% {
-                opacity: 0;
-            }
-            100% {
-                opacity: 1;
-            }
+            25% { opacity: 1; }
+            50% { opacity: 0; }
+            100% { opacity: 1; }
         }
     </style>
 </head>
-<body>
+<body class="themed">
 <div class="container">
     <nav aria-label="breadcrumb" class="mb-2">
         <ol class="breadcrumb mb-0">

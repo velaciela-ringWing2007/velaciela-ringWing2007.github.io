@@ -410,6 +410,48 @@ body.themed::before {
     color: var(--text-primary);
 }
 
+/* フォーム要素 */
+.themed .form-select {
+    background-color: var(--bg-input);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+.themed .form-select:focus {
+    background-color: var(--bg-input);
+    color: var(--text-primary);
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 0.25rem rgba(var(--accent-rgb), 0.25);
+}
+.themed .form-select option {
+    background-color: var(--bg-card);
+    color: var(--text-primary);
+}
+
+/* パンくずリスト */
+.themed .breadcrumb {
+    background: transparent;
+}
+.themed .breadcrumb-item a {
+    color: var(--text-secondary);
+}
+.themed .breadcrumb-item a:hover {
+    color: var(--text-primary);
+}
+.themed .breadcrumb-item.active {
+    color: var(--text-muted);
+}
+.themed .breadcrumb-item + .breadcrumb-item::before {
+    color: var(--text-muted);
+}
+
+/* リンク */
+.themed a {
+    color: var(--color-link);
+}
+.themed a:hover {
+    color: var(--color-link-hover);
+}
+
 /* ===== テーマ専用エフェクト ===== */
 
 /* Terminal Green テーマ */
