@@ -8,97 +8,229 @@
           crossorigin="anonymous">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
+        /* ===== テーマ定義 ===== */
+        /* デフォルトテーマ */
+        :root, [data-theme="default"] {
+            --bg-primary: #1a1a2e;
+            --bg-card: #16213e;
+            --bg-card-alt: #0f3460;
+            --bg-badge: #2d3748;
+            --bg-progress: #2d3748;
+            --text-primary: #eee;
+            --text-secondary: #888;
+            --text-muted: #aaa;
+            --color-elapsed: #4ade80;
+            --color-remaining: #60a5fa;
+            --color-overtime: #f87171;
+            --color-cost: #fbbf24;
+            --color-estimate: #a78bfa;
+            --color-link: #60a5fa;
+            --color-link-hover: #93c5fd;
+            --btn-start: #22c55e;
+            --btn-start-hover: #16a34a;
+            --btn-pause: #f59e0b;
+            --btn-pause-hover: #d97706;
+            --btn-stop: #ef4444;
+            --btn-stop-hover: #dc2626;
+            --btn-reset: #6b7280;
+            --progress-gradient: linear-gradient(90deg, #22c55e, #4ade80);
+            --progress-over-gradient: linear-gradient(90deg, #ef4444, #f87171);
+            --card-border: none;
+            --card-radius: 12px;
+            --font-display: 'Courier New', monospace;
+            --glow-effect: none;
+            --scanline: none;
+        }
+
+        /* 攻殻機動隊テーマ */
+        [data-theme="gits"] {
+            --bg-primary: #0a0a0a;
+            --bg-card: #0d1a0d;
+            --bg-card-alt: #0a150a;
+            --bg-badge: #1a2f1a;
+            --bg-progress: #1a2f1a;
+            --text-primary: #00ff41;
+            --text-secondary: #00aa2a;
+            --text-muted: #008822;
+            --color-elapsed: #00ff41;
+            --color-remaining: #00ffaa;
+            --color-overtime: #ff3333;
+            --color-cost: #00ff41;
+            --color-estimate: #00cc33;
+            --color-link: #00ff41;
+            --color-link-hover: #88ff88;
+            --btn-start: #00aa2a;
+            --btn-start-hover: #00ff41;
+            --btn-pause: #aaaa00;
+            --btn-pause-hover: #ffff00;
+            --btn-stop: #aa0000;
+            --btn-stop-hover: #ff0000;
+            --btn-reset: #444;
+            --progress-gradient: linear-gradient(90deg, #00aa2a, #00ff41);
+            --progress-over-gradient: linear-gradient(90deg, #aa0000, #ff3333);
+            --card-border: 1px solid #00ff4133;
+            --card-radius: 2px;
+            --font-display: 'Courier New', monospace;
+            --glow-effect: 0 0 10px #00ff4166;
+            --scanline: repeating-linear-gradient(
+                0deg,
+                rgba(0, 255, 65, 0.03) 0px,
+                rgba(0, 255, 65, 0.03) 1px,
+                transparent 1px,
+                transparent 2px
+            );
+        }
+
+        /* ===== 基本スタイル ===== */
         body {
             margin: 30px 10px;
-            background-color: #1a1a2e;
-            color: #eee;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: var(--font-display);
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--scanline);
+            pointer-events: none;
+            z-index: 9999;
         }
         .current-time {
             font-size: 1.5rem;
-            font-family: monospace;
-            color: #888;
+            font-family: var(--font-display);
+            color: var(--text-secondary);
+            text-shadow: var(--glow-effect);
         }
         .timer-display {
-            font-family: 'Courier New', monospace;
+            font-family: var(--font-display);
             font-size: 4rem;
             font-weight: bold;
+            text-shadow: var(--glow-effect);
         }
         .cost-display {
-            font-family: 'Courier New', monospace;
+            font-family: var(--font-display);
             font-size: 3rem;
             font-weight: bold;
-            color: #ffc107;
+            color: var(--color-cost);
+            text-shadow: var(--glow-effect);
         }
         .cost-rate {
             font-size: 1.2rem;
-            color: #aaa;
+            color: var(--text-muted);
         }
         .stat-card {
-            background: #16213e;
-            border-radius: 12px;
+            background: var(--bg-card);
+            border-radius: var(--card-radius);
+            border: var(--card-border);
             padding: 20px;
             margin-bottom: 15px;
+            box-shadow: var(--glow-effect);
         }
         .stat-label {
             font-size: 0.9rem;
-            color: #888;
+            color: var(--text-secondary);
             margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
         .stat-value {
             font-size: 1.8rem;
             font-weight: bold;
-            font-family: monospace;
+            font-family: var(--font-display);
+            text-shadow: var(--glow-effect);
         }
-        .elapsed { color: #4ade80; }
-        .remaining { color: #60a5fa; }
-        .over-time { color: #f87171; }
-        .cost-current { color: #fbbf24; }
-        .cost-estimate { color: #a78bfa; }
+        .elapsed { color: var(--color-elapsed); }
+        .remaining { color: var(--color-remaining); }
+        .over-time { color: var(--color-overtime); }
+        .cost-current { color: var(--color-cost); }
+        .cost-estimate { color: var(--color-estimate); }
         .participant-badge {
             display: inline-block;
-            background: #2d3748;
+            background: var(--bg-badge);
             border-radius: 20px;
             padding: 5px 12px;
             margin: 3px;
             font-size: 0.9rem;
+            border: var(--card-border);
         }
         .participant-badge .cost {
-            color: #fbbf24;
+            color: var(--color-cost);
             margin-left: 5px;
         }
-        .btn-start { background-color: #22c55e; border-color: #22c55e; }
-        .btn-start:hover { background-color: #16a34a; border-color: #16a34a; }
-        .btn-pause { background-color: #f59e0b; border-color: #f59e0b; }
-        .btn-pause:hover { background-color: #d97706; border-color: #d97706; }
-        .btn-stop { background-color: #ef4444; border-color: #ef4444; }
-        .btn-stop:hover { background-color: #dc2626; border-color: #dc2626; }
-        .btn-reset { background-color: #6b7280; border-color: #6b7280; }
+        .btn-start { background-color: var(--btn-start); border-color: var(--btn-start); }
+        .btn-start:hover { background-color: var(--btn-start-hover); border-color: var(--btn-start-hover); }
+        .btn-pause { background-color: var(--btn-pause); border-color: var(--btn-pause); }
+        .btn-pause:hover { background-color: var(--btn-pause-hover); border-color: var(--btn-pause-hover); }
+        .btn-stop { background-color: var(--btn-stop); border-color: var(--btn-stop); }
+        .btn-stop:hover { background-color: var(--btn-stop-hover); border-color: var(--btn-stop-hover); }
+        .btn-reset { background-color: var(--btn-reset); border-color: var(--btn-reset); }
         .progress-container {
-            background: #2d3748;
-            border-radius: 10px;
+            background: var(--bg-progress);
+            border-radius: var(--card-radius);
             height: 30px;
             overflow: hidden;
             margin: 20px 0;
+            border: var(--card-border);
         }
         .progress-bar-custom {
             height: 100%;
             transition: width 0.5s ease;
         }
         .progress-elapsed {
-            background: linear-gradient(90deg, #22c55e, #4ade80);
+            background: var(--progress-gradient);
         }
         .progress-over {
-            background: linear-gradient(90deg, #ef4444, #f87171);
+            background: var(--progress-over-gradient);
         }
         .summary-section {
             display: none;
-            background: #0f3460;
-            border-radius: 12px;
+            background: var(--bg-card-alt);
+            border-radius: var(--card-radius);
+            border: var(--card-border);
             padding: 25px;
             margin-top: 20px;
         }
-        a { color: #60a5fa; }
-        a:hover { color: #93c5fd; }
+        a { color: var(--color-link); }
+        a:hover { color: var(--color-link-hover); }
+
+        /* テーマ選択UI */
+        .theme-selector {
+            background: var(--bg-card);
+            border: var(--card-border);
+            color: var(--text-primary);
+        }
+
+        /* 攻殻機動隊テーマ専用エフェクト */
+        [data-theme="gits"] .stat-card {
+            position: relative;
+        }
+        [data-theme="gits"] .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #00ff41, transparent);
+            animation: scanline-move 2s linear infinite;
+        }
+        @keyframes scanline-move {
+            0% { opacity: 0.3; }
+            50% { opacity: 1; }
+            100% { opacity: 0.3; }
+        }
+        [data-theme="gits"] .breadcrumb {
+            background: transparent;
+            border-left: 2px solid #00ff41;
+            padding-left: 10px;
+        }
+        [data-theme="gits"] .breadcrumb-item.active {
+            color: #00ff41;
+        }
     </style>
 </head>
 <body>
@@ -113,7 +245,13 @@
             </nav>
             <div class="d-flex justify-content-between align-items-center">
                 <h2>コストタイマー</h2>
-                <a href="settings.html" class="btn btn-outline-light btn-sm">設定</a>
+                <div class="d-flex gap-2 align-items-center">
+                    <select class="form-select form-select-sm theme-selector" id="themeSelect" style="width: auto;">
+                        <option value="default">Default</option>
+                        <option value="gits">攻殻機動隊</option>
+                    </select>
+                    <a href="settings.html" class="btn btn-outline-light btn-sm">設定</a>
+                </div>
             </div>
         </div>
     </div>
@@ -405,6 +543,7 @@ $(document).ready(function() {
 
     // 初期化
     function init() {
+        loadTheme();
         loadSettings();
         renderPresets();
         participantsModal = new bootstrap.Modal(document.getElementById('participantsModal'));
@@ -431,6 +570,17 @@ $(document).ready(function() {
         renderParticipants();
         updateEstimate();
         updateButtonStates();
+    }
+
+    function loadTheme() {
+        const savedTheme = localStorage.getItem('costTimerTheme') || 'default';
+        document.body.setAttribute('data-theme', savedTheme);
+        $('#themeSelect').val(savedTheme);
+    }
+
+    function saveTheme(theme) {
+        localStorage.setItem('costTimerTheme', theme);
+        document.body.setAttribute('data-theme', theme);
     }
 
     function loadSettings() {
@@ -646,6 +796,11 @@ $(document).ready(function() {
     }
 
     function setupEventListeners() {
+        // テーマ切り替え
+        $('#themeSelect').on('change', function() {
+            saveTheme($(this).val());
+        });
+
         $('#startBtn').on('click', function() {
             state.status = 'running';
             state.startTime = new Date();
