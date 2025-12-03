@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>コストタイマー</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet"
+          crossorigin="anonymous">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body {
+            margin: 30px 10px;
+            background-color: #1a1a2e;
+            color: #eee;
+        }
+        .current-time {
+            font-size: 1.5rem;
+            font-family: monospace;
+            color: #888;
+        }
+        .timer-display {
+            font-family: 'Courier New', monospace;
+            font-size: 4rem;
+            font-weight: bold;
+        }
+        .cost-display {
+            font-family: 'Courier New', monospace;
+            font-size: 3rem;
+            font-weight: bold;
+            color: #ffc107;
+        }
+        .cost-rate {
+            font-size: 1.2rem;
+            color: #aaa;
+        }
+        .stat-card {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+        }
+        .stat-label {
+            font-size: 0.9rem;
+            color: #888;
+            margin-bottom: 5px;
+        }
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            font-family: monospace;
+        }
+        .elapsed { color: #4ade80; }
+        .remaining { color: #60a5fa; }
+        .over-time { color: #f87171; }
+        .cost-current { color: #fbbf24; }
+        .cost-estimate { color: #a78bfa; }
+        .participant-badge {
+            display: inline-block;
+            background: #2d3748;
+            border-radius: 20px;
+            padding: 5px 12px;
+            margin: 3px;
+            font-size: 0.9rem;
+        }
+        .participant-badge .cost {
+            color: #fbbf24;
+            margin-left: 5px;
+        }
+        .btn-start { background-color: #22c55e; border-color: #22c55e; }
+        .btn-start:hover { background-color: #16a34a; border-color: #16a34a; }
+        .btn-pause { background-color: #f59e0b; border-color: #f59e0b; }
+        .btn-pause:hover { background-color: #d97706; border-color: #d97706; }
+        .btn-stop { background-color: #ef4444; border-color: #ef4444; }
+        .btn-stop:hover { background-color: #dc2626; border-color: #dc2626; }
+        .btn-reset { background-color: #6b7280; border-color: #6b7280; }
+        .progress-container {
+            background: #2d3748;
+            border-radius: 10px;
+            height: 30px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+        .progress-bar-custom {
+            height: 100%;
+            transition: width 0.5s ease;
+        }
+        .progress-elapsed {
+            background: linear-gradient(90deg, #22c55e, #4ade80);
+        }
+        .progress-over {
+            background: linear-gradient(90deg, #ef4444, #f87171);
+        }
+        .summary-section {
+            display: none;
+            background: #0f3460;
+            border-radius: 12px;
+            padding: 25px;
+            margin-top: 20px;
+        }
+        a { color: #60a5fa; }
+        a:hover { color: #93c5fd; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="row mb-3">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="index.html">ホーム</a></li>
+                    <li class="breadcrumb-item active">コストタイマー</li>
+                </ol>
+            </nav>
+            <div class="d-flex justify-content-between align-items-center">
+                <h2>コストタイマー</h2>
+                <a href="costTimerSettingsPage.html" class="btn btn-outline-light btn-sm">設定</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 現在時刻 -->
+    <div class="row mb-4">
+        <div class="col text-center">
+            <div class="current-time" id="currentTime">--:--:--</div>
+        </div>
+    </div>
+
+    <!-- 参加者表示 -->
+    <div class="row mb-3">
+        <div class="col">
+            <div class="stat-card">
+                <div class="stat-label">参加者 (<span id="participantCount">0</span>名) - 合計単価: <span id="totalHourlyRate">¥0</span>/時</div>
+                <div id="participantList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- メインタイマー表示 -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <div class="stat-card text-center">
+                <div class="stat-label">経過時間</div>
+                <div class="stat-value elapsed" id="elapsedTime">00:00:00</div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="stat-card text-center">
+                <div class="stat-label">残り時間</div>
+                <div class="stat-value remaining" id="remainingTime">--:--:--</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- プログレスバー -->
+    <div class="row mb-3">
+        <div class="col">
+            <div class="progress-container">
+                <div class="progress-bar-custom progress-elapsed" id="progressBar" style="width: 0%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- コスト表示 -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <div class="stat-card text-center">
+                <div class="stat-label">現在のコスト</div>
+                <div class="cost-display" id="currentCost">¥0</div>
+                <div class="cost-rate" id="costRate">¥0/分</div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="stat-card text-center">
+                <div class="stat-label">予定時間でのコスト見積もり</div>
+                <div class="stat-value cost-estimate" id="estimatedCost">¥0</div>
+                <div class="cost-rate">予定終了: <span id="plannedEndTime">--:--</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 超過表示 -->
+    <div class="row mb-3" id="overTimeSection" style="display: none;">
+        <div class="col">
+            <div class="stat-card text-center" style="border: 2px solid #ef4444;">
+                <div class="stat-label">超過時間</div>
+                <div class="stat-value over-time" id="overTime">00:00:00</div>
+                <div class="cost-rate">超過コスト: <span id="overCost" class="text-danger">¥0</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- コントロールボタン -->
+    <div class="row mb-4">
+        <div class="col text-center">
+            <button class="btn btn-start btn-lg me-2" id="startBtn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="m11.596 8.697-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/>
+                </svg>
+                開始
+            </button>
+            <button class="btn btn-pause btn-lg me-2" id="pauseBtn" style="display: none;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M5.5 3.5A1.5 1.5 0 0 1 7 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5m5 0A1.5 1.5 0 0 1 12 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5"/>
+                </svg>
+                一時停止
+            </button>
+            <button class="btn btn-start btn-lg me-2" id="resumeBtn" style="display: none;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="m11.596 8.697-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/>
+                </svg>
+                再開
+            </button>
+            <button class="btn btn-stop btn-lg me-2" id="stopBtn" style="display: none;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M5 3.5h6A1.5 1.5 0 0 1 12.5 5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 11V5A1.5 1.5 0 0 1 5 3.5"/>
+                </svg>
+                終了
+            </button>
+            <button class="btn btn-reset btn-lg" id="resetBtn">
+                リセット
+            </button>
+        </div>
+    </div>
+
+    <!-- サマリーセクション（終了後表示） -->
+    <div class="summary-section" id="summarySection">
+        <h4 class="mb-4">ミーティングサマリー</h4>
+        <div class="row">
+            <div class="col-md-4">
+                <div class="stat-label">開始時刻</div>
+                <div class="stat-value" id="summaryStartTime">--:--:--</div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-label">終了時刻</div>
+                <div class="stat-value" id="summaryEndTime">--:--:--</div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-label">実際の所要時間</div>
+                <div class="stat-value" id="summaryDuration">--:--:--</div>
+            </div>
+        </div>
+        <hr style="border-color: #4a5568;">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="stat-label">予定コスト</div>
+                <div class="stat-value cost-estimate" id="summaryEstimatedCost">¥0</div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-label">実際のコスト</div>
+                <div class="stat-value cost-current" id="summaryActualCost">¥0</div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-label">差額</div>
+                <div class="stat-value" id="summaryCostDiff">¥0</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 設定セクション -->
+    <div class="row mt-4">
+        <div class="col">
+            <div class="stat-card">
+                <h5 class="mb-3">クイック設定</h5>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">予定時間（分）</label>
+                        <input type="number" class="form-control bg-dark text-light" id="plannedDuration" value="60" min="1">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">参加者プリセット</label>
+                        <select class="form-select bg-dark text-light" id="presetSelect">
+                            <option value="">-- 選択 --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">操作</label>
+                        <div>
+                            <button class="btn btn-outline-light btn-sm" id="applyPresetBtn">プリセット適用</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // 状態管理
+    let state = {
+        status: 'idle', // idle, running, paused, stopped
+        startTime: null,
+        pausedTime: 0,
+        pauseStartTime: null,
+        participants: [],
+        plannedDuration: 60, // 分
+        totalHourlyRate: 0
+    };
+
+    // 設定データ
+    let settings = {
+        presets: []
+    };
+
+    // 初期化
+    function init() {
+        loadSettings();
+        renderPresets();
+        updateCurrentTime();
+        setInterval(updateCurrentTime, 1000);
+        setInterval(updateDisplay, 100);
+        setupEventListeners();
+
+        // デフォルト参加者（設定がない場合）
+        if (settings.presets.length === 0) {
+            state.participants = [
+                { name: "参加者1", hourlyRate: 5000 },
+                { name: "参加者2", hourlyRate: 5000 }
+            ];
+        }
+        calculateTotalRate();
+        renderParticipants();
+        updateEstimate();
+    }
+
+    function loadSettings() {
+        const cookieValue = document.cookie.replace(/(?:(?:^|.*;\s*)costTimerSettings\s*\=\s*([^;]*).*$)|^.*$/, '$1');
+        if (cookieValue) {
+            try {
+                settings = JSON.parse(decodeURIComponent(cookieValue));
+            } catch (e) {
+                console.error('Failed to load settings:', e);
+            }
+        }
+    }
+
+    function updateCurrentTime() {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('ja-JP', { hour12: false });
+        $('#currentTime').text(timeStr);
+    }
+
+    function calculateTotalRate() {
+        state.totalHourlyRate = state.participants.reduce((sum, p) => sum + p.hourlyRate, 0);
+        $('#totalHourlyRate').text(formatCurrency(state.totalHourlyRate));
+        $('#costRate').text(formatCurrency(state.totalHourlyRate / 60) + '/分');
+    }
+
+    function renderParticipants() {
+        const $list = $('#participantList');
+        $list.empty();
+        state.participants.forEach(p => {
+            $list.append(`
+                <span class="participant-badge">
+                    ${escapeHtml(p.name)}
+                    <span class="cost">¥${p.hourlyRate.toLocaleString()}/h</span>
+                </span>
+            `);
+        });
+        $('#participantCount').text(state.participants.length);
+    }
+
+    function renderPresets() {
+        const $select = $('#presetSelect');
+        $select.find('option:not(:first)').remove();
+        settings.presets.forEach((preset, index) => {
+            $select.append(`<option value="${index}">${escapeHtml(preset.name)}</option>`);
+        });
+    }
+
+    function updateEstimate() {
+        const plannedMinutes = state.plannedDuration;
+        const estimatedCost = (state.totalHourlyRate / 60) * plannedMinutes;
+        $('#estimatedCost').text(formatCurrency(estimatedCost));
+
+        if (state.startTime) {
+            const endTime = new Date(state.startTime.getTime() + plannedMinutes * 60 * 1000);
+            $('#plannedEndTime').text(endTime.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }));
+        } else {
+            const now = new Date();
+            const endTime = new Date(now.getTime() + plannedMinutes * 60 * 1000);
+            $('#plannedEndTime').text(endTime.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }));
+        }
+    }
+
+    function updateDisplay() {
+        if (state.status === 'idle' || state.status === 'stopped') return;
+
+        const now = new Date();
+        let elapsedMs;
+
+        if (state.status === 'paused') {
+            elapsedMs = state.pauseStartTime - state.startTime - state.pausedTime;
+        } else {
+            elapsedMs = now - state.startTime - state.pausedTime;
+        }
+
+        const elapsedSeconds = Math.floor(elapsedMs / 1000);
+        const plannedSeconds = state.plannedDuration * 60;
+
+        // 経過時間
+        $('#elapsedTime').text(formatTime(elapsedSeconds));
+
+        // 残り時間
+        const remainingSeconds = plannedSeconds - elapsedSeconds;
+        if (remainingSeconds >= 0) {
+            $('#remainingTime').text(formatTime(remainingSeconds)).removeClass('over-time').addClass('remaining');
+            $('#overTimeSection').hide();
+        } else {
+            $('#remainingTime').text('00:00:00').removeClass('remaining');
+            $('#overTimeSection').show();
+            $('#overTime').text(formatTime(Math.abs(remainingSeconds)));
+            const overCost = (state.totalHourlyRate / 3600) * Math.abs(remainingSeconds);
+            $('#overCost').text(formatCurrency(overCost));
+        }
+
+        // プログレスバー
+        const progress = Math.min((elapsedSeconds / plannedSeconds) * 100, 100);
+        const $progressBar = $('#progressBar');
+        $progressBar.css('width', progress + '%');
+        if (elapsedSeconds > plannedSeconds) {
+            $progressBar.removeClass('progress-elapsed').addClass('progress-over');
+        } else {
+            $progressBar.removeClass('progress-over').addClass('progress-elapsed');
+        }
+
+        // 現在のコスト
+        const currentCost = (state.totalHourlyRate / 3600) * elapsedSeconds;
+        $('#currentCost').text(formatCurrency(currentCost));
+    }
+
+    function formatTime(totalSeconds) {
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+
+    function formatCurrency(amount) {
+        return '¥' + Math.round(amount).toLocaleString();
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function setupEventListeners() {
+        $('#startBtn').on('click', function() {
+            state.status = 'running';
+            state.startTime = new Date();
+            state.pausedTime = 0;
+            state.plannedDuration = parseInt($('#plannedDuration').val()) || 60;
+
+            $('#startBtn').hide();
+            $('#pauseBtn').show();
+            $('#stopBtn').show();
+            $('#summarySection').hide();
+
+            updateEstimate();
+        });
+
+        $('#pauseBtn').on('click', function() {
+            state.status = 'paused';
+            state.pauseStartTime = new Date();
+
+            $('#pauseBtn').hide();
+            $('#resumeBtn').show();
+        });
+
+        $('#resumeBtn').on('click', function() {
+            state.status = 'running';
+            state.pausedTime += new Date() - state.pauseStartTime;
+
+            $('#resumeBtn').hide();
+            $('#pauseBtn').show();
+        });
+
+        $('#stopBtn').on('click', function() {
+            state.status = 'stopped';
+            const endTime = new Date();
+
+            let elapsedMs;
+            if (state.pauseStartTime && state.status === 'paused') {
+                elapsedMs = state.pauseStartTime - state.startTime - state.pausedTime;
+            } else {
+                elapsedMs = endTime - state.startTime - state.pausedTime;
+            }
+            const elapsedSeconds = Math.floor(elapsedMs / 1000);
+
+            // サマリー表示
+            $('#summaryStartTime').text(state.startTime.toLocaleTimeString('ja-JP', { hour12: false }));
+            $('#summaryEndTime').text(endTime.toLocaleTimeString('ja-JP', { hour12: false }));
+            $('#summaryDuration').text(formatTime(elapsedSeconds));
+
+            const estimatedCost = (state.totalHourlyRate / 60) * state.plannedDuration;
+            const actualCost = (state.totalHourlyRate / 3600) * elapsedSeconds;
+            const diff = actualCost - estimatedCost;
+
+            $('#summaryEstimatedCost').text(formatCurrency(estimatedCost));
+            $('#summaryActualCost').text(formatCurrency(actualCost));
+            $('#summaryCostDiff')
+                .text((diff >= 0 ? '+' : '') + formatCurrency(diff))
+                .removeClass('elapsed over-time')
+                .addClass(diff >= 0 ? 'over-time' : 'elapsed');
+
+            $('#summarySection').show();
+
+            $('#pauseBtn, #resumeBtn, #stopBtn').hide();
+            $('#startBtn').show();
+        });
+
+        $('#resetBtn').on('click', function() {
+            state.status = 'idle';
+            state.startTime = null;
+            state.pausedTime = 0;
+            state.pauseStartTime = null;
+
+            $('#elapsedTime').text('00:00:00');
+            $('#remainingTime').text('--:--:--').removeClass('over-time').addClass('remaining');
+            $('#currentCost').text('¥0');
+            $('#overTimeSection').hide();
+            $('#progressBar').css('width', '0%').removeClass('progress-over').addClass('progress-elapsed');
+            $('#summarySection').hide();
+
+            $('#pauseBtn, #resumeBtn, #stopBtn').hide();
+            $('#startBtn').show();
+
+            updateEstimate();
+        });
+
+        $('#plannedDuration').on('change', function() {
+            state.plannedDuration = parseInt($(this).val()) || 60;
+            updateEstimate();
+        });
+
+        $('#applyPresetBtn').on('click', function() {
+            const index = $('#presetSelect').val();
+            if (index === '') return;
+
+            const preset = settings.presets[index];
+            if (preset) {
+                state.participants = preset.participants.map(p => ({ ...p }));
+                calculateTotalRate();
+                renderParticipants();
+                updateEstimate();
+            }
+        });
+    }
+
+    init();
+});
+</script>
+</body>
+</html>
