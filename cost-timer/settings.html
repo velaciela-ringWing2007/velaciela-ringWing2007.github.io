@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>コストタイマー設定</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet"
+          crossorigin="anonymous">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body {
+            margin: 30px 10px;
+        }
+        .preset-card {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .preset-card:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .participant-item {
+            background: #fff;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 8px;
+        }
+        .drag-handle {
+            cursor: grab;
+            color: #adb5bd;
+        }
+        .drag-handle:hover {
+            color: #6c757d;
+        }
+        .total-rate {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #ffc107;
+            background: #212529;
+            padding: 10px 15px;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="row mb-4">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="../index.html">ホーム</a></li>
+                    <li class="breadcrumb-item"><a href="index.html">コストタイマー</a></li>
+                    <li class="breadcrumb-item active">設定</li>
+                </ol>
+            </nav>
+            <h2>コストタイマー設定</h2>
+            <p class="text-muted">参加者プリセットを管理します。設定はCookieに保存されます。</p>
+        </div>
+    </div>
+
+    <!-- プリセット一覧 -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4>参加者プリセット</h4>
+                <button type="button" class="btn btn-success" id="addPresetBtn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-lg" viewBox="0 0 16 16">
+                        <path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2"/>
+                    </svg>
+                    プリセットを追加
+                </button>
+            </div>
+            <div id="presetList"></div>
+            <div id="emptyMessage" class="text-center text-muted py-5" style="display: none;">
+                プリセットがありません。「プリセットを追加」ボタンで追加してください。
+            </div>
+        </div>
+    </div>
+
+    <!-- 操作ボタン -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-primary btn-lg" id="saveBtn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check-lg" viewBox="0 0 16 16">
+                        <path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425a.247.247 0 0 1 .02-.022"/>
+                    </svg>
+                    保存
+                </button>
+                <a href="index.html" class="btn btn-outline-primary">
+                    タイマー画面へ
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- よく使う単価 -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">参考: 時給の目安</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>年収</th>
+                                <th>月給換算</th>
+                                <th>時給換算（160h/月）</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>400万円</td><td>約33万円</td><td>約2,100円</td></tr>
+                            <tr><td>500万円</td><td>約42万円</td><td>約2,600円</td></tr>
+                            <tr><td>600万円</td><td>約50万円</td><td>約3,100円</td></tr>
+                            <tr><td>800万円</td><td>約67万円</td><td>約4,200円</td></tr>
+                            <tr><td>1000万円</td><td>約83万円</td><td>約5,200円</td></tr>
+                            <tr><td>1500万円</td><td>約125万円</td><td>約7,800円</td></tr>
+                        </tbody>
+                    </table>
+                    <small class="text-muted">※ 実際の人件費は福利厚生等を含めると1.5〜2倍程度になります</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- プリセット編集モーダル -->
+<div class="modal fade" id="presetModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="presetModalTitle">プリセットを追加</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="presetName" class="form-label">プリセット名 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="presetName" placeholder="例: 定例MTG">
+                </div>
+
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label mb-0">参加者</label>
+                        <button type="button" class="btn btn-sm btn-outline-success" id="addParticipantBtn">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-plus-lg" viewBox="0 0 16 16">
+                                <path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2"/>
+                            </svg>
+                            参加者を追加
+                        </button>
+                    </div>
+                    <div id="participantList"></div>
+                    <div id="participantEmptyMessage" class="text-center text-muted py-3" style="display: none;">
+                        参加者がいません。
+                    </div>
+                </div>
+
+                <div class="total-rate text-center">
+                    合計時給: <span id="modalTotalRate">¥0</span>/時
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-primary" id="savePresetBtn">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
+<script>
+$(document).ready(function() {
+    const defaultSettings = {
+        presets: [
+            {
+                name: "定例MTG（3名）",
+                participants: [
+                    { name: "マネージャー", hourlyRate: 6000 },
+                    { name: "エンジニア1", hourlyRate: 4000 },
+                    { name: "エンジニア2", hourlyRate: 4000 }
+                ]
+            }
+        ]
+    };
+
+    let settings = { presets: [] };
+    let editingIndex = -1;
+    let currentParticipants = [];
+    let presetModal;
+
+    function init() {
+        presetModal = new bootstrap.Modal(document.getElementById('presetModal'));
+        loadSettings();
+        renderPresetList();
+        setupEventListeners();
+    }
+
+    function loadSettings() {
+        const cookieValue = document.cookie.replace(/(?:(?:^|.*;\s*)costTimerSettings\s*\=\s*([^;]*).*$)|^.*$/, '$1');
+        if (cookieValue) {
+            try {
+                settings = JSON.parse(decodeURIComponent(cookieValue));
+            } catch (e) {
+                console.error('Failed to load settings:', e);
+                settings = JSON.parse(JSON.stringify(defaultSettings));
+            }
+        } else {
+            settings = JSON.parse(JSON.stringify(defaultSettings));
+        }
+    }
+
+    function saveSettings() {
+        const expirationDate = new Date();
+        expirationDate.setFullYear(expirationDate.getFullYear() + 1);
+        document.cookie = `costTimerSettings=${encodeURIComponent(JSON.stringify(settings))}; expires=${expirationDate.toUTCString()}; path=/; SameSite=Lax; Secure`;
+    }
+
+    function renderPresetList() {
+        const $list = $('#presetList');
+        $list.empty();
+
+        if (settings.presets.length === 0) {
+            $('#emptyMessage').show();
+            return;
+        }
+        $('#emptyMessage').hide();
+
+        settings.presets.forEach((preset, index) => {
+            const totalRate = preset.participants.reduce((sum, p) => sum + p.hourlyRate, 0);
+            const participantNames = preset.participants.map(p => p.name).join(', ');
+
+            $list.append(`
+                <div class="preset-card" data-index="${index}">
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <strong>${escapeHtml(preset.name)}</strong>
+                            <span class="badge bg-secondary ms-2">${preset.participants.length}名</span>
+                            <div class="text-muted small">${escapeHtml(participantNames)}</div>
+                            <div class="text-warning fw-bold">¥${totalRate.toLocaleString()}/時</div>
+                        </div>
+                        <div class="col-auto">
+                            <button type="button" class="btn btn-sm btn-outline-primary edit-btn" data-index="${index}">
+                                編集
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger delete-btn" data-index="${index}">
+                                削除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `);
+        });
+    }
+
+    function renderParticipantList() {
+        const $list = $('#participantList');
+        $list.empty();
+
+        if (currentParticipants.length === 0) {
+            $('#participantEmptyMessage').show();
+            updateModalTotal();
+            return;
+        }
+        $('#participantEmptyMessage').hide();
+
+        currentParticipants.forEach((p, index) => {
+            $list.append(`
+                <div class="participant-item" data-index="${index}">
+                    <div class="row align-items-center g-2">
+                        <div class="col-auto drag-handle">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M7 2a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0M7 5a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0M7 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0m-3 3a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0m-3 3a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0"/>
+                            </svg>
+                        </div>
+                        <div class="col">
+                            <input type="text" class="form-control form-control-sm participant-name"
+                                   value="${escapeHtml(p.name)}" placeholder="名前" data-index="${index}">
+                        </div>
+                        <div class="col-auto">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">¥</span>
+                                <input type="number" class="form-control participant-rate" style="width: 100px;"
+                                       value="${p.hourlyRate}" min="0" step="100" data-index="${index}">
+                                <span class="input-group-text">/時</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <button type="button" class="btn btn-sm btn-outline-danger remove-participant-btn" data-index="${index}">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                                    <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                                    <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `);
+        });
+
+        updateModalTotal();
+    }
+
+    function updateModalTotal() {
+        const total = currentParticipants.reduce((sum, p) => sum + (p.hourlyRate || 0), 0);
+        $('#modalTotalRate').text('¥' + total.toLocaleString());
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function setupEventListeners() {
+        // プリセット追加
+        $('#addPresetBtn').on('click', function() {
+            editingIndex = -1;
+            currentParticipants = [];
+            $('#presetName').val('');
+            $('#presetModalTitle').text('プリセットを追加');
+            renderParticipantList();
+            presetModal.show();
+        });
+
+        // プリセット編集
+        $(document).on('click', '.edit-btn', function() {
+            editingIndex = parseInt($(this).data('index'));
+            const preset = settings.presets[editingIndex];
+            currentParticipants = preset.participants.map(p => ({ ...p }));
+            $('#presetName').val(preset.name);
+            $('#presetModalTitle').text('プリセットを編集');
+            renderParticipantList();
+            presetModal.show();
+        });
+
+        // プリセット削除
+        $(document).on('click', '.delete-btn', function() {
+            const index = parseInt($(this).data('index'));
+            if (confirm('このプリセットを削除しますか？')) {
+                settings.presets.splice(index, 1);
+                renderPresetList();
+            }
+        });
+
+        // 参加者追加
+        $('#addParticipantBtn').on('click', function() {
+            currentParticipants.push({ name: '', hourlyRate: 5000 });
+            renderParticipantList();
+        });
+
+        // 参加者削除
+        $(document).on('click', '.remove-participant-btn', function() {
+            const index = parseInt($(this).data('index'));
+            currentParticipants.splice(index, 1);
+            renderParticipantList();
+        });
+
+        // 参加者名変更
+        $(document).on('input', '.participant-name', function() {
+            const index = parseInt($(this).data('index'));
+            currentParticipants[index].name = $(this).val();
+        });
+
+        // 参加者単価変更
+        $(document).on('input', '.participant-rate', function() {
+            const index = parseInt($(this).data('index'));
+            currentParticipants[index].hourlyRate = parseInt($(this).val()) || 0;
+            updateModalTotal();
+        });
+
+        // プリセット保存
+        $('#savePresetBtn').on('click', function() {
+            const name = $('#presetName').val().trim();
+            if (!name) {
+                alert('プリセット名を入力してください');
+                return;
+            }
+
+            if (currentParticipants.length === 0) {
+                alert('参加者を1名以上追加してください');
+                return;
+            }
+
+            // 空の名前をフィルタリング
+            const validParticipants = currentParticipants.filter(p => p.name.trim());
+            if (validParticipants.length === 0) {
+                alert('参加者の名前を入力してください');
+                return;
+            }
+
+            const preset = {
+                name: name,
+                participants: validParticipants.map(p => ({
+                    name: p.name.trim(),
+                    hourlyRate: p.hourlyRate || 0
+                }))
+            };
+
+            if (editingIndex >= 0) {
+                settings.presets[editingIndex] = preset;
+            } else {
+                settings.presets.push(preset);
+            }
+
+            renderPresetList();
+            presetModal.hide();
+        });
+
+        // 全体保存
+        $('#saveBtn').on('click', function() {
+            saveSettings();
+            alert('設定を保存しました！');
+        });
+    }
+
+    init();
+});
+</script>
+</body>
+</html>

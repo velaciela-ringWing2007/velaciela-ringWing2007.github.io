@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>コストタイマー</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet"
+          crossorigin="anonymous">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body {
+            margin: 30px 10px;
+            background-color: #1a1a2e;
+            color: #eee;
+        }
+        .current-time {
+            font-size: 1.5rem;
+            font-family: monospace;
+            color: #888;
+        }
+        .timer-display {
+            font-family: 'Courier New', monospace;
+            font-size: 4rem;
+            font-weight: bold;
+        }
+        .cost-display {
+            font-family: 'Courier New', monospace;
+            font-size: 3rem;
+            font-weight: bold;
+            color: #ffc107;
+        }
+        .cost-rate {
+            font-size: 1.2rem;
+            color: #aaa;
+        }
+        .stat-card {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+        }
+        .stat-label {
+            font-size: 0.9rem;
+            color: #888;
+            margin-bottom: 5px;
+        }
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            font-family: monospace;
+        }
+        .elapsed { color: #4ade80; }
+        .remaining { color: #60a5fa; }
+        .over-time { color: #f87171; }
+        .cost-current { color: #fbbf24; }
+        .cost-estimate { color: #a78bfa; }
+        .participant-badge {
+            display: inline-block;
+            background: #2d3748;
+            border-radius: 20px;
+            padding: 5px 12px;
+            margin: 3px;
+            font-size: 0.9rem;
+        }
+        .participant-badge .cost {
+            color: #fbbf24;
+            margin-left: 5px;
+        }
+        .btn-start { background-color: #22c55e; border-color: #22c55e; }
+        .btn-start:hover { background-color: #16a34a; border-color: #16a34a; }
+        .btn-pause { background-color: #f59e0b; border-color: #f59e0b; }
+        .btn-pause:hover { background-color: #d97706; border-color: #d97706; }
+        .btn-stop { background-color: #ef4444; border-color: #ef4444; }
+        .btn-stop:hover { background-color: #dc2626; border-color: #dc2626; }
+        .btn-reset { background-color: #6b7280; border-color: #6b7280; }
+        .progress-container {
+            background: #2d3748;
+            border-radius: 10px;
+            height: 30px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+        .progress-bar-custom {
+            height: 100%;
+            transition: width 0.5s ease;
+        }
+        .progress-elapsed {
+            background: linear-gradient(90deg, #22c55e, #4ade80);
+        }
+        .progress-over {
+            background: linear-gradient(90deg, #ef4444, #f87171);
+        }
+        .summary-section {
+            display: none;
+            background: #0f3460;
+            border-radius: 12px;
+            padding: 25px;
+            margin-top: 20px;
+        }
+        a { color: #60a5fa; }
+        a:hover { color: #93c5fd; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="row mb-3">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="../index.html">ホーム</a></li>
+                    <li class="breadcrumb-item active">コストタイマー</li>
+                </ol>
+            </nav>
+            <div class="d-flex justify-content-between align-items-center">
+                <h2>コストタイマー</h2>
+                <a href="settings.html" class="btn btn-outline-light btn-sm">設定</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 現在時刻 -->
+    <div class="row mb-4">
+        <div class="col text-center">
+            <div class="current-time" id="currentTime">--:--:--</div>
+        </div>
+    </div>
+
+    <!-- 参加者表示 -->
+    <div class="row mb-3">
+        <div class="col">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div class="stat-label mb-0">参加者 (<span id="participantCount">0</span>名) - 合計単価: <span id="totalHourlyRate">¥0</span>/時</div>
+                    <div class="d-flex gap-1">
+                        <button class="btn btn-sm btn-outline-danger" id="clearParticipantsBtn" title="参加者をクリア">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                                <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                            </svg>
+                        </button>
+                        <button class="btn btn-sm btn-outline-light" id="editParticipantsBtn" title="参加者を編集">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div id="participantList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- メインタイマー表示 -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <div class="stat-card text-center">
+                <div class="stat-label">経過時間</div>
+                <div class="stat-value elapsed" id="elapsedTime">00:00:00</div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="stat-card text-center">
+                <div class="stat-label">残り時間</div>
+                <div class="stat-value remaining" id="remainingTime">--:--:--</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- プログレスバー -->
+    <div class="row mb-3">
+        <div class="col">
+            <div class="progress-container">
+                <div class="progress-bar-custom progress-elapsed" id="progressBar" style="width: 0%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- コスト表示 -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <div class="stat-card text-center">
+                <div class="stat-label">現在のコスト</div>
+                <div class="cost-display" id="currentCost">¥0</div>
+                <div class="cost-rate" id="costRate">¥0/分</div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="stat-card text-center">
+                <div class="stat-label">予定時間でのコスト見積もり</div>
+                <div class="stat-value cost-estimate" id="estimatedCost">¥0</div>
+                <div class="cost-rate">予定終了: <span id="plannedEndTime">--:--</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 超過表示 -->
+    <div class="row mb-3" id="overTimeSection" style="display: none;">
+        <div class="col">
+            <div class="stat-card text-center" style="border: 2px solid #ef4444;">
+                <div class="stat-label">超過時間</div>
+                <div class="stat-value over-time" id="overTime">00:00:00</div>
+                <div class="cost-rate">超過コスト: <span id="overCost" class="text-danger">¥0</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- コントロールボタン -->
+    <div class="row mb-4">
+        <div class="col text-center">
+            <button class="btn btn-start btn-lg me-2" id="startBtn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="m11.596 8.697-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/>
+                </svg>
+                開始
+            </button>
+            <button class="btn btn-pause btn-lg me-2" id="pauseBtn" style="display: none;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M5.5 3.5A1.5 1.5 0 0 1 7 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5m5 0A1.5 1.5 0 0 1 12 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5"/>
+                </svg>
+                一時停止
+            </button>
+            <button class="btn btn-start btn-lg me-2" id="resumeBtn" style="display: none;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="m11.596 8.697-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/>
+                </svg>
+                再開
+            </button>
+            <button class="btn btn-stop btn-lg me-2" id="stopBtn" style="display: none;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M5 3.5h6A1.5 1.5 0 0 1 12.5 5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 11V5A1.5 1.5 0 0 1 5 3.5"/>
+                </svg>
+                終了
+            </button>
+            <button class="btn btn-reset btn-lg" id="resetBtn">
+                リセット
+            </button>
+        </div>
+    </div>
+
+    <!-- サマリーセクション（終了後表示） -->
+    <div class="summary-section" id="summarySection">
+        <h4 class="mb-4">ミーティングサマリー</h4>
+        <div class="row">
+            <div class="col-md-4">
+                <div class="stat-label">開始時刻</div>
+                <div class="stat-value" id="summaryStartTime">--:--:--</div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-label">終了時刻</div>
+                <div class="stat-value" id="summaryEndTime">--:--:--</div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-label">実際の所要時間</div>
+                <div class="stat-value" id="summaryDuration">--:--:--</div>
+            </div>
+        </div>
+        <hr style="border-color: #4a5568;">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="stat-label">予定コスト</div>
+                <div class="stat-value cost-estimate" id="summaryEstimatedCost">¥0</div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-label">実際のコスト</div>
+                <div class="stat-value cost-current" id="summaryActualCost">¥0</div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-label">差額</div>
+                <div class="stat-value" id="summaryCostDiff">¥0</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 設定セクション -->
+    <div class="row mt-4">
+        <div class="col">
+            <div class="stat-card">
+                <h5 class="mb-3">クイック設定</h5>
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label">予定時間</label>
+                        <div class="d-flex align-items-center gap-2">
+                            <input type="number" class="form-control bg-dark text-light text-center" id="plannedHours" value="1" min="0" max="23" style="width: 70px;">
+                            <span>時間</span>
+                            <input type="number" class="form-control bg-dark text-light text-center" id="plannedMinutes" value="0" min="0" max="59" style="width: 70px;">
+                            <span>分</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">参加者プリセット</label>
+                        <select class="form-select bg-dark text-light" id="presetSelect">
+                            <option value="">-- 選択 --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <button class="btn btn-outline-light" id="applyPresetBtn">プリセット適用</button>
+                    </div>
+                </div>
+                <div class="row g-3 mt-2">
+                    <div class="col-12">
+                        <label class="form-label">よく使う時間</label>
+                        <div class="d-flex flex-wrap gap-2">
+                            <button class="btn btn-sm btn-outline-secondary quick-time-btn" data-minutes="15">15分</button>
+                            <button class="btn btn-sm btn-outline-secondary quick-time-btn" data-minutes="30">30分</button>
+                            <button class="btn btn-sm btn-outline-secondary quick-time-btn" data-minutes="45">45分</button>
+                            <button class="btn btn-sm btn-outline-secondary quick-time-btn" data-minutes="60">1時間</button>
+                            <button class="btn btn-sm btn-outline-secondary quick-time-btn" data-minutes="90">1.5時間</button>
+                            <button class="btn btn-sm btn-outline-secondary quick-time-btn" data-minutes="120">2時間</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 参加者編集モーダル -->
+<div class="modal fade" id="participantsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark text-light">
+            <div class="modal-header">
+                <h5 class="modal-title">参加者を編集</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label mb-0">参加者一覧</label>
+                        <button type="button" class="btn btn-sm btn-success" id="addParticipantBtn">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-plus-lg" viewBox="0 0 16 16">
+                                <path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2"/>
+                            </svg>
+                            追加
+                        </button>
+                    </div>
+                    <div id="modalParticipantList"></div>
+                </div>
+                <div class="text-center p-3" style="background: #16213e; border-radius: 8px;">
+                    <span class="text-muted">合計時給:</span>
+                    <span class="fs-4 fw-bold text-warning" id="modalTotalRate">¥0</span>/時
+                </div>
+                <!-- プリセット情報と注意書き -->
+                <div id="presetInfoSection" class="mt-3 p-3" style="background: #2d3748; border-radius: 8px; display: none;">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#ffc107" viewBox="0 0 16 16">
+                            <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>
+                            <path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0"/>
+                        </svg>
+                        <span class="text-warning" id="presetInfoText">プリセット「」を編集中</span>
+                    </div>
+                    <small class="d-block mb-2" style="color: #a0aec0;">
+                        ここでの変更は今回のセッションのみ有効です。プリセット自体は変更されません。
+                    </small>
+                    <button type="button" class="btn btn-sm btn-outline-warning" id="saveToPresetBtn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="me-1" viewBox="0 0 16 16">
+                            <path d="M2 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H9.5a1 1 0 0 0-1 1v7.293l2.646-2.647a.5.5 0 0 1 .708.708l-3.5 3.5a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L7.5 9.293V2a2 2 0 0 1 2-2H14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h2.5a.5.5 0 0 1 0 1z"/>
+                        </svg>
+                        プリセットに保存
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-primary" id="saveParticipantsBtn">適用</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
+<script>
+$(document).ready(function() {
+    // 状態管理
+    let state = {
+        status: 'idle', // idle, running, paused, stopped
+        startTime: null,
+        pausedTime: 0,
+        pauseStartTime: null,
+        participants: [],
+        plannedDuration: 60, // 分
+        totalHourlyRate: 0
+    };
+
+    // 設定データ（デフォルトプリセット付き）
+    const defaultSettings = {
+        presets: [
+            {
+                name: "定例MTG（3名）",
+                participants: [
+                    { name: "マネージャー", hourlyRate: 6000 },
+                    { name: "エンジニア1", hourlyRate: 4000 },
+                    { name: "エンジニア2", hourlyRate: 4000 }
+                ]
+            }
+        ]
+    };
+
+    let settings = JSON.parse(JSON.stringify(defaultSettings));
+
+    // モーダル用の一時参加者リスト
+    let tempParticipants = [];
+    let participantsModal;
+    let currentPresetIndex = null; // 現在適用中のプリセットインデックス
+
+    // 初期化
+    function init() {
+        loadSettings();
+        renderPresets();
+        participantsModal = new bootstrap.Modal(document.getElementById('participantsModal'));
+        updateCurrentTime();
+        setInterval(updateCurrentTime, 1000);
+        setInterval(updateDisplay, 100);
+        setupEventListeners();
+
+        // 予定時間の初期値をstateに反映
+        state.plannedDuration = getPlannedDurationFromInputs();
+
+        // デフォルト参加者（プリセットがある場合は最初のを使う）
+        if (settings.presets.length > 0) {
+            state.participants = settings.presets[0].participants.map(p => ({ ...p }));
+            currentPresetIndex = 0;
+            $('#presetSelect').val('0');
+        } else {
+            state.participants = [
+                { name: "参加者1", hourlyRate: 5000 },
+                { name: "参加者2", hourlyRate: 5000 }
+            ];
+        }
+        calculateTotalRate();
+        renderParticipants();
+        updateEstimate();
+        updateButtonStates();
+    }
+
+    function loadSettings() {
+        const cookieValue = document.cookie.replace(/(?:(?:^|.*;\s*)costTimerSettings\s*\=\s*([^;]*).*$)|^.*$/, '$1');
+        if (cookieValue) {
+            try {
+                settings = JSON.parse(decodeURIComponent(cookieValue));
+            } catch (e) {
+                console.error('Failed to load settings:', e);
+            }
+        }
+    }
+
+    function updateCurrentTime() {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('ja-JP', { hour12: false });
+        $('#currentTime').text(timeStr);
+    }
+
+    function calculateTotalRate() {
+        state.totalHourlyRate = state.participants.reduce((sum, p) => sum + p.hourlyRate, 0);
+        $('#totalHourlyRate').text(formatCurrency(state.totalHourlyRate));
+        $('#costRate').text(formatCurrency(state.totalHourlyRate / 60) + '/分');
+    }
+
+    function renderParticipants() {
+        const $list = $('#participantList');
+        $list.empty();
+        state.participants.forEach(p => {
+            $list.append(`
+                <span class="participant-badge">
+                    ${escapeHtml(p.name)}
+                    <span class="cost">¥${p.hourlyRate.toLocaleString()}/h</span>
+                </span>
+            `);
+        });
+        $('#participantCount').text(state.participants.length);
+    }
+
+    function renderPresets() {
+        const $select = $('#presetSelect');
+        $select.find('option:not(:first)').remove();
+        settings.presets.forEach((preset, index) => {
+            $select.append(`<option value="${index}">${escapeHtml(preset.name)}</option>`);
+        });
+    }
+
+    function getPlannedDurationFromInputs() {
+        const hours = parseInt($('#plannedHours').val()) || 0;
+        const minutes = parseInt($('#plannedMinutes').val()) || 0;
+        return hours * 60 + minutes;
+    }
+
+    function setPlannedDurationInputs(totalMinutes) {
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        $('#plannedHours').val(hours);
+        $('#plannedMinutes').val(minutes);
+    }
+
+    function updateEstimate() {
+        const plannedMinutes = state.plannedDuration;
+
+        // 0分の場合はコスト0で固定
+        if (plannedMinutes <= 0) {
+            $('#estimatedCost').text('¥0');
+            $('#plannedEndTime').text('--:--');
+            return;
+        }
+
+        const estimatedCost = (state.totalHourlyRate / 60) * plannedMinutes;
+        $('#estimatedCost').text(formatCurrency(estimatedCost));
+
+        if (state.startTime) {
+            const endTime = new Date(state.startTime.getTime() + plannedMinutes * 60 * 1000);
+            $('#plannedEndTime').text(endTime.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }));
+        } else {
+            const now = new Date();
+            const endTime = new Date(now.getTime() + plannedMinutes * 60 * 1000);
+            $('#plannedEndTime').text(endTime.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }));
+        }
+    }
+
+    function updateDisplay() {
+        if (state.status === 'idle' || state.status === 'stopped') return;
+
+        const now = new Date();
+        let elapsedMs;
+
+        if (state.status === 'paused') {
+            elapsedMs = state.pauseStartTime - state.startTime - state.pausedTime;
+        } else {
+            elapsedMs = now - state.startTime - state.pausedTime;
+        }
+
+        const elapsedSeconds = Math.floor(elapsedMs / 1000);
+        const plannedSeconds = state.plannedDuration * 60;
+
+        // 経過時間
+        $('#elapsedTime').text(formatTime(elapsedSeconds));
+
+        // 残り時間（予定0分の場合は常に超過扱い）
+        if (plannedSeconds <= 0) {
+            $('#remainingTime').text('--:--:--').removeClass('over-time remaining');
+            $('#overTimeSection').hide();
+            $('#progressBar').css('width', '0%');
+        } else {
+            const remainingSeconds = plannedSeconds - elapsedSeconds;
+            if (remainingSeconds >= 0) {
+                $('#remainingTime').text(formatTime(remainingSeconds)).removeClass('over-time').addClass('remaining');
+                $('#overTimeSection').hide();
+            } else {
+                $('#remainingTime').text('00:00:00').removeClass('remaining');
+                $('#overTimeSection').show();
+                $('#overTime').text(formatTime(Math.abs(remainingSeconds)));
+                const overCost = (state.totalHourlyRate / 3600) * Math.abs(remainingSeconds);
+                $('#overCost').text(formatCurrency(overCost));
+            }
+
+            // プログレスバー
+            const progress = Math.min((elapsedSeconds / plannedSeconds) * 100, 100);
+            const $progressBar = $('#progressBar');
+            $progressBar.css('width', progress + '%');
+            if (elapsedSeconds > plannedSeconds) {
+                $progressBar.removeClass('progress-elapsed').addClass('progress-over');
+            } else {
+                $progressBar.removeClass('progress-over').addClass('progress-elapsed');
+            }
+        }
+
+        // 現在のコスト
+        const currentCost = (state.totalHourlyRate / 3600) * elapsedSeconds;
+        $('#currentCost').text(formatCurrency(currentCost));
+    }
+
+    function formatTime(totalSeconds) {
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+
+    function formatCurrency(amount) {
+        return '¥' + Math.round(amount).toLocaleString();
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // モーダル用参加者リスト描画
+    function renderModalParticipantList() {
+        const $list = $('#modalParticipantList');
+        $list.empty();
+
+        if (tempParticipants.length === 0) {
+            $list.append('<div class="text-center text-muted py-3">参加者がいません</div>');
+            updateModalTotalRate();
+            return;
+        }
+
+        tempParticipants.forEach((p, index) => {
+            $list.append(`
+                <div class="d-flex align-items-center gap-2 mb-2 p-2" style="background: #2d3748; border-radius: 6px;">
+                    <input type="text" class="form-control form-control-sm bg-secondary text-light modal-participant-name"
+                           value="${escapeHtml(p.name)}" placeholder="名前" data-index="${index}" style="flex: 1;">
+                    <div class="input-group input-group-sm" style="width: 150px;">
+                        <span class="input-group-text bg-secondary text-light">¥</span>
+                        <input type="number" class="form-control bg-secondary text-light modal-participant-rate"
+                               value="${p.hourlyRate}" min="0" step="100" data-index="${index}">
+                        <span class="input-group-text bg-secondary text-light">/h</span>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-danger remove-modal-participant-btn" data-index="${index}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                            <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                        </svg>
+                    </button>
+                </div>
+            `);
+        });
+
+        updateModalTotalRate();
+    }
+
+    function updateModalTotalRate() {
+        const total = tempParticipants.reduce((sum, p) => sum + (p.hourlyRate || 0), 0);
+        $('#modalTotalRate').text('¥' + total.toLocaleString());
+    }
+
+    function updateModalPresetInfo() {
+        if (currentPresetIndex !== null && settings.presets[currentPresetIndex]) {
+            const presetName = settings.presets[currentPresetIndex].name;
+            $('#presetInfoText').text(`プリセット「${presetName}」を編集中`);
+            $('#presetInfoSection').show();
+        } else {
+            $('#presetInfoSection').hide();
+        }
+    }
+
+    function saveSettings() {
+        const expirationDate = new Date();
+        expirationDate.setFullYear(expirationDate.getFullYear() + 1);
+        document.cookie = `costTimerSettings=${encodeURIComponent(JSON.stringify(settings))}; expires=${expirationDate.toUTCString()}; path=/; SameSite=Lax; Secure`;
+    }
+
+    function updateButtonStates() {
+        const hasParticipants = state.participants.length > 0;
+        $('#startBtn').prop('disabled', !hasParticipants);
+        $('#clearParticipantsBtn').prop('disabled', !hasParticipants);
+    }
+
+    function setupEventListeners() {
+        $('#startBtn').on('click', function() {
+            state.status = 'running';
+            state.startTime = new Date();
+            state.pausedTime = 0;
+            state.plannedDuration = getPlannedDurationFromInputs();
+
+            $('#startBtn').hide();
+            $('#pauseBtn').show();
+            $('#stopBtn').show();
+            $('#summarySection').hide();
+
+            updateEstimate();
+        });
+
+        $('#pauseBtn').on('click', function() {
+            state.status = 'paused';
+            state.pauseStartTime = new Date();
+
+            $('#pauseBtn').hide();
+            $('#resumeBtn').show();
+        });
+
+        $('#resumeBtn').on('click', function() {
+            state.status = 'running';
+            state.pausedTime += new Date() - state.pauseStartTime;
+
+            $('#resumeBtn').hide();
+            $('#pauseBtn').show();
+        });
+
+        $('#stopBtn').on('click', function() {
+            state.status = 'stopped';
+            const endTime = new Date();
+
+            let elapsedMs;
+            if (state.pauseStartTime && state.status === 'paused') {
+                elapsedMs = state.pauseStartTime - state.startTime - state.pausedTime;
+            } else {
+                elapsedMs = endTime - state.startTime - state.pausedTime;
+            }
+            const elapsedSeconds = Math.floor(elapsedMs / 1000);
+
+            // サマリー表示
+            $('#summaryStartTime').text(state.startTime.toLocaleTimeString('ja-JP', { hour12: false }));
+            $('#summaryEndTime').text(endTime.toLocaleTimeString('ja-JP', { hour12: false }));
+            $('#summaryDuration').text(formatTime(elapsedSeconds));
+
+            const estimatedCost = (state.totalHourlyRate / 60) * state.plannedDuration;
+            const actualCost = (state.totalHourlyRate / 3600) * elapsedSeconds;
+            const diff = actualCost - estimatedCost;
+
+            $('#summaryEstimatedCost').text(formatCurrency(estimatedCost));
+            $('#summaryActualCost').text(formatCurrency(actualCost));
+            $('#summaryCostDiff')
+                .text((diff >= 0 ? '+' : '') + formatCurrency(diff))
+                .removeClass('elapsed over-time')
+                .addClass(diff >= 0 ? 'over-time' : 'elapsed');
+
+            $('#summarySection').show();
+
+            $('#pauseBtn, #resumeBtn, #stopBtn').hide();
+            $('#startBtn').show();
+        });
+
+        $('#resetBtn').on('click', function() {
+            state.status = 'idle';
+            state.startTime = null;
+            state.pausedTime = 0;
+            state.pauseStartTime = null;
+
+            $('#elapsedTime').text('00:00:00');
+            $('#remainingTime').text('--:--:--').removeClass('over-time').addClass('remaining');
+            $('#currentCost').text('¥0');
+            $('#overTimeSection').hide();
+            $('#progressBar').css('width', '0%').removeClass('progress-over').addClass('progress-elapsed');
+            $('#summarySection').hide();
+
+            $('#pauseBtn, #resumeBtn, #stopBtn').hide();
+            $('#startBtn').show();
+
+            updateEstimate();
+        });
+
+        // 予定時間の変更
+        $('#plannedHours, #plannedMinutes').on('change', function() {
+            state.plannedDuration = getPlannedDurationFromInputs();
+            updateEstimate();
+        });
+
+        // よく使う時間ボタン
+        $('.quick-time-btn').on('click', function() {
+            const minutes = parseInt($(this).data('minutes'));
+            state.plannedDuration = minutes;
+            setPlannedDurationInputs(minutes);
+            updateEstimate();
+        });
+
+        // プリセット適用
+        $('#applyPresetBtn').on('click', function() {
+            const index = $('#presetSelect').val();
+            if (index === '') {
+                alert('プリセットを選択してください');
+                return;
+            }
+
+            const preset = settings.presets[parseInt(index)];
+            if (preset) {
+                state.participants = preset.participants.map(p => ({ ...p }));
+                currentPresetIndex = parseInt(index);
+                calculateTotalRate();
+                renderParticipants();
+                updateEstimate();
+                updateButtonStates();
+            }
+        });
+
+        // プリセット選択時に自動適用
+        $('#presetSelect').on('change', function() {
+            const index = $(this).val();
+            if (index === '') {
+                currentPresetIndex = null;
+                return;
+            }
+
+            const preset = settings.presets[parseInt(index)];
+            if (preset) {
+                state.participants = preset.participants.map(p => ({ ...p }));
+                currentPresetIndex = parseInt(index);
+                calculateTotalRate();
+                renderParticipants();
+                updateEstimate();
+                updateButtonStates();
+            }
+        });
+
+        // 参加者クリア
+        $('#clearParticipantsBtn').on('click', function() {
+            if (state.participants.length === 0) return;
+
+            let message = '参加者をすべてクリアしますか？';
+            if (state.status !== 'idle') {
+                message += '\n\nタイマーもリセットされます。';
+            }
+            if ($('#summarySection').is(':visible')) {
+                message += '\nサマリーも消去されます。';
+            }
+
+            if (!confirm(message)) return;
+
+            // 参加者クリア
+            state.participants = [];
+            currentPresetIndex = null;
+            $('#presetSelect').val('');
+
+            // タイマーリセット
+            state.status = 'idle';
+            state.startTime = null;
+            state.pausedTime = 0;
+            state.pauseStartTime = null;
+
+            // 表示リセット
+            $('#elapsedTime').text('00:00:00');
+            $('#remainingTime').text('--:--:--').removeClass('over-time').addClass('remaining');
+            $('#currentCost').text('¥0');
+            $('#overTimeSection').hide();
+            $('#progressBar').css('width', '0%').removeClass('progress-over').addClass('progress-elapsed');
+            $('#summarySection').hide();
+
+            $('#pauseBtn, #resumeBtn, #stopBtn').hide();
+            $('#startBtn').show();
+
+            calculateTotalRate();
+            renderParticipants();
+            updateEstimate();
+            updateButtonStates();
+        });
+
+        // 参加者編集モーダルを開く
+        $('#editParticipantsBtn').on('click', function() {
+            tempParticipants = state.participants.map(p => ({ ...p }));
+            renderModalParticipantList();
+            updateModalPresetInfo();
+            participantsModal.show();
+        });
+
+        // 参加者追加（モーダル内）
+        $('#addParticipantBtn').on('click', function() {
+            tempParticipants.push({ name: '', hourlyRate: 5000 });
+            renderModalParticipantList();
+        });
+
+        // 参加者削除（モーダル内）
+        $(document).on('click', '.remove-modal-participant-btn', function() {
+            const index = parseInt($(this).data('index'));
+            tempParticipants.splice(index, 1);
+            renderModalParticipantList();
+        });
+
+        // 参加者名変更（モーダル内）
+        $(document).on('input', '.modal-participant-name', function() {
+            const index = parseInt($(this).data('index'));
+            tempParticipants[index].name = $(this).val();
+        });
+
+        // 参加者単価変更（モーダル内）
+        $(document).on('input', '.modal-participant-rate', function() {
+            const index = parseInt($(this).data('index'));
+            tempParticipants[index].hourlyRate = parseInt($(this).val()) || 0;
+            updateModalTotalRate();
+        });
+
+        // 参加者を適用（モーダル内）
+        $('#saveParticipantsBtn').on('click', function() {
+            // 空の名前をフィルタリング
+            const validParticipants = tempParticipants.filter(p => p.name.trim());
+            if (validParticipants.length === 0) {
+                alert('参加者を1名以上追加してください');
+                return;
+            }
+            state.participants = validParticipants.map(p => ({
+                name: p.name.trim(),
+                hourlyRate: p.hourlyRate || 0
+            }));
+            calculateTotalRate();
+            renderParticipants();
+            updateEstimate();
+            updateButtonStates();
+            participantsModal.hide();
+        });
+
+        // プリセットに保存（モーダル内）
+        $('#saveToPresetBtn').on('click', function() {
+            if (currentPresetIndex === null || !settings.presets[currentPresetIndex]) {
+                alert('プリセットが選択されていません');
+                return;
+            }
+
+            const validParticipants = tempParticipants.filter(p => p.name.trim());
+            if (validParticipants.length === 0) {
+                alert('参加者を1名以上追加してください');
+                return;
+            }
+
+            const presetName = settings.presets[currentPresetIndex].name;
+            if (confirm(`プリセット「${presetName}」を上書き保存しますか？`)) {
+                settings.presets[currentPresetIndex].participants = validParticipants.map(p => ({
+                    name: p.name.trim(),
+                    hourlyRate: p.hourlyRate || 0
+                }));
+                saveSettings();
+                alert(`プリセット「${presetName}」を保存しました`);
+            }
+        });
+    }
+
+    init();
+});
+</script>
+</body>
+</html>
