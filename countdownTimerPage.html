@@ -471,8 +471,11 @@
         crossorigin="anonymous"></script>
 <script src="common/theme-switcher.js"></script>
 <script>
-    // テーマ切り替え初期化（デフォルト: White）
-    ThemeSwitcher.init('themeSelect', 'white');
+    // テーマ切り替え初期化（デフォルト: White、独自ストレージキー）
+    ThemeSwitcher.init('themeSelect', {
+        defaultTheme: 'white',
+        storageKey: 'countdownTimerTheme'
+    });
 </script>
 </body>
 </html>

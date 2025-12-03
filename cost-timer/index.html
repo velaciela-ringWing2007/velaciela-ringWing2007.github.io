@@ -1084,14 +1084,14 @@ $(document).ready(function() {
     }
 
     function loadTheme() {
-        // nebukinToolsTheme を共通で使用（カウントダウンタイマーと共有）
-        const savedTheme = localStorage.getItem('nebukinToolsTheme') || 'dark';
+        // costTimerTheme を使用（コストタイマー専用）
+        const savedTheme = localStorage.getItem('costTimerTheme') || 'dark';
         document.body.setAttribute('data-theme', savedTheme);
         $('#themeSelect').val(savedTheme);
     }
 
     function saveTheme(theme) {
-        localStorage.setItem('nebukinToolsTheme', theme);
+        localStorage.setItem('costTimerTheme', theme);
         document.body.setAttribute('data-theme', theme);
     }
 

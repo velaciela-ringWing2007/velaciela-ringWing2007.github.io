@@ -9,7 +9,7 @@
  */
 
 const ThemeSwitcher = {
-    STORAGE_KEY: 'nebukinToolsTheme',
+    storageKey: 'nebukinToolsTheme',
 
     themes: [
         { value: 'white', label: 'White' },
@@ -30,11 +30,20 @@ const ThemeSwitcher = {
     /**
      * 初期化
      * @param {string} selectId - テーマ選択セレクトボックスのID（デフォルト: 'themeSelect'）
-     * @param {string} defaultTheme - ページ固有のデフォルトテーマ（オプション）
+     * @param {Object} options - オプション
+     * @param {string} options.defaultTheme - ページ固有のデフォルトテーマ
+     * @param {string} options.storageKey - ページ固有のストレージキー
      */
-    init: function(selectId = 'themeSelect', defaultTheme = null) {
-        if (defaultTheme) {
-            this.defaultTheme = defaultTheme;
+    init: function(selectId = 'themeSelect', options = {}) {
+        // 後方互換: 第2引数が文字列の場合はdefaultThemeとして扱う
+        if (typeof options === 'string') {
+            options = { defaultTheme: options };
+        }
+        if (options.defaultTheme) {
+            this.defaultTheme = options.defaultTheme;
+        }
+        if (options.storageKey) {
+            this.storageKey = options.storageKey;
         }
         this.selectElement = document.getElementById(selectId);
 
@@ -72,7 +81,7 @@ const ThemeSwitcher = {
      * テーマを読み込んで適用
      */
     load: function() {
-        const savedTheme = localStorage.getItem(this.STORAGE_KEY) || this.defaultTheme;
+        const savedTheme = localStorage.getItem(this.storageKey) || this.defaultTheme;
         this.apply(savedTheme);
 
         if (this.selectElement) {
@@ -85,7 +94,7 @@ const ThemeSwitcher = {
      * @param {string} theme - テーマ名
      */
     save: function(theme) {
-        localStorage.setItem(this.STORAGE_KEY, theme);
+        localStorage.setItem(this.storageKey, theme);
         this.apply(theme);
     },
 
@@ -102,7 +111,7 @@ const ThemeSwitcher = {
      * @returns {string} テーマ名
      */
     current: function() {
-        return localStorage.getItem(this.STORAGE_KEY) || this.defaultTheme;
+        return localStorage.getItem(this.storageKey) || this.defaultTheme;
     },
 
     /**
