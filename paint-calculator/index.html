@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎨 塗料硬化剤計算アプリ</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; }
+        .container { max-width: 900px; margin-top: 20px; }
+        .input-section, .output-section { padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .input-section { background-color: #ffffff; border: 1px solid #dee2e6; }
+        .output-section { background-color: #e9ecef; border: 1px solid #ced4da; }
+        .liquid-row { margin-bottom: 15px; padding: 10px; border: 1px dashed #ced4da; border-radius: 4px; }
+        .result-value { font-size: 1.25rem; font-weight: bold; color: #007bff; }
+        .unit-toggle { margin-bottom: 15px; }
+        .form-label { font-weight: 600; }
+        .calculation-mode { font-size: 1.2rem; font-weight: bold; color: #28a745; margin-top: 10px; }
+        .density-toggle { cursor: pointer; color: #007bff; text-decoration: underline; }
+        .density-inputs { display: none; margin-top: 10px; padding: 10px; background-color: #f1f1f1; border-radius: 4px;}
+        /* 基準値入力欄を強調 */
+        #baseValueInput { font-size: 1.25rem; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1 class="text-center mb-4">🎨 塗料硬化剤・希釈液計算アプリ</h1>
+
+    <div class="input-section">
+        <h3 class="mb-3">1. 基本情報</h3>
+
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label for="ratioUnit" class="form-label">混合比の基準</label>
+                <select id="ratioUnit" class="form-select" onchange="calculate()">
+                    <option value="weight">重量比 (kg/g)</option>
+                    <option value="volume">体積比 (L/mL)</option>
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label for="surfaceAmount" class="form-label">標準塗布量 (C)</label>
+                <div class="input-group">
+                    <input type="number" id="surfaceAmount" class="form-control" value="0.2" min="0" oninput="calculate()">
+                    <select id="surfaceUnit" class="form-select" onchange="calculate()">
+                        <option value="kg/m2">kg/m²</option>
+                        <option value="L/m2">L/m²</option>
+                    </select>
+                </div>
+                <small class="text-muted">（混合液 $\text{m}^2$ あたりの所要量）</small>
+            </div>
+        </div>
+
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label for="dilutionRate" class="form-label">希釈率 (D)</label>
+                <div class="input-group">
+                    <input type="number" id="dilutionRate" class="form-control" value="10" min="0" oninput="calculate()">
+                    <span class="input-group-text">%</span>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <label for="lossRate" class="form-label">作業ロス率 (L)</label>
+                <div class="input-group">
+                    <input type="number" id="lossRate" class="form-control" value="5" min="0" oninput="calculate()">
+                    <span class="input-group-text">%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="input-section">
+        <h3 class="mb-3">2. 液体情報と比率</h3>
+        
+        <div id="liquidsContainer">
+            </div>
+
+        <button class="btn btn-sm btn-outline-success me-2" onclick="addLiquid()">+ 液体を追加</button>
+        <button class="btn btn-sm btn-outline-danger" onclick="removeLiquid()">- 液体を削除</button>
+
+        <p class="density-toggle mt-3" onclick="toggleDensityInputs()">
+            重量・体積の相互変換が必要な場合はこちらをタップ
+        </p>
+
+        <div id="densityInputs" class="density-inputs">
+            <small class="text-danger d-block mb-2">※ 混合比の基準と異なる単位で結果を見たい場合のみ入力</small>
+            <div id="liquidDensityContainer">
+                </div>
+        </div>
+    </div>
+
+    <div class="input-section bg-light">
+        <h3 class="mb-3">3. 計算基準（どれか一つを選択）</h3>
+        
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label for="baseMode" class="form-label">計算基準</label>
+                <select id="baseMode" class="form-select" onchange="updateBaseValueInput(); calculate()">
+                    </select>
+            </div>
+            <div class="col-md-6">
+                <label for="baseValueInput" class="form-label">基準値</label>
+                <div class="input-group">
+                    <input type="number" id="baseValueInput" class="form-control" value="10" min="0" oninput="calculate()">
+                    <span class="input-group-text" id="baseValueUnit">m²</span>
+                </div>
+            </div>
+        </div>
+
+        <p class="calculation-mode">現在の計算モード: <span id="calculationMode">塗装面積 (A) 基準</span></p>
+    </div>
+
+    <div class="output-section">
+        <h3 class="mb-3">4. 計算結果（必要量）</h3>
+        
+        <div class="unit-toggle text-end">
+            <button class="btn btn-sm btn-primary" id="toggleUnitBtn" onclick="toggleUnit()">単位切り替え (kg ↔ g)</button>
+            <small class="d-block text-muted">※ 表示単位の $\text{kg/g}$ と $\text{L/mL}$ を切り替えます</small>
+        </div>
+
+        <div class="row" id="resultsContainer">
+            </div>
+
+        <hr>
+        
+        <div class="row">
+            <div class="col-md-6 mb-2">
+                <p class="mb-0">混合液合計 (V'mix)</p>
+                <p class="result-value" id="result_V_mix">0.00 kg</p>
+            </div>
+            <div class="col-md-6 mb-2">
+                <p class="mb-0">希釈液所要量 (V'thinner)</p>
+                <p class="result-value" id="result_V_thinner">0.00 kg</p>
+            </div>
+            <div class="col-md-6 mb-2">
+                <p class="mb-0 text-success">希釈液入り合計 (V'total)</p>
+                <p class="result-value text-success" id="result_V_total">0.00 kg</p>
+            </div>
+            <div class="col-md-6 mb-2">
+                <p class="mb-0 text-danger">塗装可能面積 (A) ※ロス含まず</p>
+                <p class="result-value text-danger" id="result_A">0.00 m²</p>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    let liquidCount = 0;
+    let currentUnit = 'kg'; // kg or g, L or mL
+    let baseUnitType = 'weight'; // weight or volume
+
+    document.addEventListener('DOMContentLoaded', () => {
+        addLiquid('主液', 4); // 初期値：主液 4
+        addLiquid('硬化剤', 1); // 初期値：硬化剤 1
+        calculate();
+    });
+
+    /**
+     * 密度入力欄の表示/非表示を切り替える
+     */
+    function toggleDensityInputs() {
+        const densityDiv = document.getElementById('densityInputs');
+        if (densityDiv.style.display === 'none' || densityDiv.style.display === '') {
+            densityDiv.style.display = 'block';
+        } else {
+            densityDiv.style.display = 'none';
+        }
+    }
+
+    /**
+     * 液体入力行を追加する
+     * @param {string} defaultName - デフォルトの液名
+     * @param {number} defaultRatio - デフォルトの比率
+     */
+    function addLiquid(defaultName, defaultRatio = 0) {
+        liquidCount++;
+        const liquidId = `L${liquidCount}`;
+        const name = defaultName + (defaultName.includes('添加剤') ? (liquidCount - 2) : '');
+        
+        // === 1. 基本情報と比率 ===
+        const container = document.getElementById('liquidsContainer');
+        const newRow = document.createElement('div');
+        newRow.className = 'row liquid-row';
+        newRow.id = liquidId;
+        
+        newRow.innerHTML = `
+            <div class="col-lg-6 col-md-6 mb-2">
+                <label for="${liquidId}_name" class="form-label">液名</label>
+                <input type="text" id="${liquidId}_name" class="form-control" value="${name}" oninput="updateBaseModeOptions(); updateLiquidResultLabels()">
+            </div>
+            <div class="col-lg-6 col-md-6 mb-2">
+                <label for="${liquidId}_ratio" class="form-label">比率 (R)</label>
+                <input type="number" id="${liquidId}_ratio" class="form-control" value="${defaultRatio}" min="0" oninput="calculate()">
+            </div>
+        `;
+        container.appendChild(newRow);
+        
+        // === 2. 密度入力欄の追加 ===
+        const densityContainer = document.getElementById('liquidDensityContainer');
+        const densityRow = document.createElement('div');
+        densityRow.className = 'row mb-2';
+        densityRow.id = `${liquidId}_densityRow`;
+        densityRow.innerHTML = `
+            <div class="col-6">
+                <label for="${liquidId}_density" class="form-label">${name} 密度</label>
+                <div class="input-group">
+                    <input type="number" id="${liquidId}_density" class="form-control" value="1.0" min="0.01" oninput="calculate()">
+                    <span class="input-group-text">kg/L</span>
+                </div>
+            </div>
+        `;
+        densityContainer.appendChild(densityRow);
+        
+        // === 3. 結果表示コンテナにも要素を追加 ===
+        const resultsContainer = document.getElementById('resultsContainer');
+        const resultDiv = document.createElement('div');
+        resultDiv.className = 'col-md-6 mb-2';
+        resultDiv.id = `result_${liquidId}_div`;
+        resultDiv.innerHTML = `
+            <p class="mb-0" id="result_${liquidId}_label">${name} 所要量</p>
+            <p class="result-value" id="result_${liquidId}">0.00 ${currentUnit}</p>
+        `;
+        resultsContainer.appendChild(resultDiv);
+
+        updateBaseModeOptions();
+    }
+
+    /**
+     * 液体入力行を削除する
+     */
+    function removeLiquid() {
+        if (liquidCount > 2) {
+            const liquidId = `L${liquidCount}`;
+            document.getElementById(liquidId).remove();
+            document.getElementById(`result_${liquidId}_div`).remove();
+            document.getElementById(`${liquidId}_densityRow`).remove();
+            
+            liquidCount--;
+            updateBaseModeOptions();
+            calculate();
+        } else {
+            alert('主液、硬化剤の2液は必須です。');
+        }
+    }
+
+    /**
+     * 計算基準選択肢 (baseMode) を動的に更新する
+     */
+    function updateBaseModeOptions() {
+        const select = document.getElementById('baseMode');
+        let currentMode = select.value;
+        select.innerHTML = ''; // オプションをクリア
+
+        // 塗装面積 (A)
+        select.add(new Option('塗装面積 (A)', 'area', true));
+
+        // 混合液量 (V_mix)
+        select.add(new Option('作成量 (V_mix)', 'V_mix'));
+
+        // 個別液体の量 (Vi)
+        for (let i = 1; i <= liquidCount; i++) {
+            const liquidId = `L${i}`;
+            const name = document.getElementById(`${liquidId}_name`).value;
+            select.add(new Option(`${name}量 (V${i})`, liquidId));
+        }
+
+        // 以前の選択肢を保持
+        if (document.querySelector(`#baseMode option[value="${currentMode}"]`)) {
+            select.value = currentMode;
+        } else {
+            select.value = 'area';
+        }
+        updateBaseValueInput();
+    }
+
+    /**
+     * 基準値入力欄の単位とラベルを更新する
+     */
+    function updateBaseValueInput() {
+        const mode = document.getElementById('baseMode').value;
+        const unitEl = document.getElementById('baseValueUnit');
+        const unitType = document.getElementById('ratioUnit').value === 'weight' ? 'kg' : 'L';
+        
+        let label = '';
+        let unit = '';
+
+        if (mode === 'area') {
+            label = '塗装面積';
+            unit = 'm²';
+        } else if (mode === 'V_mix') {
+            label = '作成量 (混合液合計)';
+            unit = unitType;
+        } else {
+            const liquidName = document.getElementById(`${mode}_name`).value;
+            label = `${liquidName}量`;
+            unit = unitType;
+        }
+
+        document.getElementById('baseValueInput').placeholder = label;
+        unitEl.textContent = unit;
+        document.querySelector('label[for="baseValueInput"]').textContent = `基準値 (${label})`;
+    }
+
+    /**
+     * 単位を切り替える (kg <-> g, L <-> mL)
+     */
+    function toggleUnit() {
+        baseUnitType = document.getElementById('ratioUnit').value;
+        const isWeight = baseUnitType === 'weight';
+
+        if (isWeight) {
+            currentUnit = currentUnit === 'kg' ? 'g' : 'kg';
+        } else {
+            currentUnit = currentUnit === 'L' ? 'mL' : 'L';
+        }
+        
+        calculate();
+    }
+
+    /**
+     * メイン計算ロジック
+     */
+    function calculate() {
+        const liquids = [];
+        let totalRatio = 0;
+        
+        const baseMode = document.getElementById('baseMode').value;
+        const baseValue = parseFloat(document.getElementById('baseValueInput').value) || 0;
+
+        const dilutionRate = parseFloat(document.getElementById('dilutionRate').value) / 100 || 0;
+        const lossRate = parseFloat(document.getElementById('lossRate').value) / 100 || 0;
+        const surfaceAmount = parseFloat(document.getElementById('surfaceAmount').value) || 0;
+        const surfaceUnitIsWeight = document.getElementById('surfaceUnit').value === 'kg/m2';
+        baseUnitType = document.getElementById('ratioUnit').value;
+
+        // 1. データ収集と合計比率の計算
+        for (let i = 1; i <= liquidCount; i++) {
+            const liquidId = `L${i}`;
+            const ratio = parseFloat(document.getElementById(`${liquidId}_ratio`).value) || 0;
+            const density = parseFloat(document.getElementById(`${liquidId}_density`).value) || 1.0;
+            const name = document.getElementById(`${liquidId}_name`).value;
+            
+            liquids.push({ id: liquidId, name: name, ratio, density });
+            totalRatio += ratio;
+        }
+        
+        // 2. 計算モード表示と混合液量 (V_mix) の決定
+        let V_mix = 0;
+        let modeName = '';
+
+        if (totalRatio === 0) {
+            modeName = '⚠️ 比率の合計が0です';
+        } else if (baseMode === 'area') {
+            // 塗装面積基準
+            V_mix = baseValue * surfaceAmount;
+            modeName = `塗装面積 (${baseValue} m²) 基準`;
+        } else if (baseMode === 'V_mix') {
+            // 作成量基準
+            V_mix = baseValue;
+            modeName = `作成量 (${baseValue} ${baseUnitType === 'weight' ? 'kg' : 'L'}) 基準`;
+        } else {
+            // 個別液体量 (Vi) 基準
+            const liquid = liquids.find(l => l.id === baseMode);
+            if (liquid && liquid.ratio > 0) {
+                V_mix = baseValue * (totalRatio / liquid.ratio);
+                modeName = `${liquid.name} (${baseValue} ${baseUnitType === 'weight' ? 'kg' : 'L'}) 基準`;
+            } else {
+                modeName = '⚠️ 基準液体の比率が0です';
+            }
+        }
+        
+        document.getElementById('calculationMode').textContent = modeName;
+
+        // 3. 個別液体量の計算
+        liquids.forEach(liquid => {
+            liquid.V_i = V_mix * (liquid.ratio / totalRatio);
+        });
+
+        // 4. 希釈液量と合計量の計算
+        const V_thinner = V_mix * dilutionRate;
+        const V_total = V_mix + V_thinner;
+        
+        // 塗装可能面積 (V_mixを基準とするためロスは含めない)
+        let A_calculated = 0;
+        if (surfaceAmount > 0) {
+            // 混合液量 (V_mix) と塗面散布量 (C) の単位を合わせる必要あり
+            let V_mix_normalized = V_mix; // V_mixは比率の基準単位（kg or L）
+
+            // 塗面散布量が基準単位と異なる場合は密度で変換が必要
+            if (baseUnitType === 'weight' && surfaceUnitIsWeight === false) { // V_mix: kg, C: L/m2の場合
+                const avgDensity = liquids.reduce((sum, l) => sum + (l.V_i * l.density), 0) / V_mix;
+                V_mix_normalized = V_mix / avgDensity; // kg -> Lに変換
+            } else if (baseUnitType === 'volume' && surfaceUnitIsWeight === true) { // V_mix: L, C: kg/m2の場合
+                const avgDensity = liquids.reduce((sum, l) => sum + (l.V_i * l.density), 0) / V_mix;
+                V_mix_normalized = V_mix * avgDensity; // L -> kgに変換
+            }
+            A_calculated = V_mix_normalized / surfaceAmount;
+        }
+
+        // 5. 結果表示（単位変換とロス率適用）
+        const isConvertKgToG = currentUnit === 'g';
+        const isConvertLToML = currentUnit === 'mL';
+        const unitLabel = currentUnit;
+        const factor = isConvertKgToG || isConvertLToML ? 1000 : 1;
+        const isWeight = currentUnit === 'kg' || currentUnit === 'g';
+
+        document.getElementById('toggleUnitBtn').textContent = `${baseUnitType === 'weight' ? '重量' : '体積'}単位切り替え (${currentUnit} ↔ ${isConvertKgToG ? 'kg' : (isConvertLToML ? 'L' : (isWeight ? 'g' : 'mL'))})`;
+
+
+        // 個別液体の表示
+        liquids.forEach(liquid => {
+            let V_i_base = liquid.V_i;
+            
+            // 表示単位に合わせるための変換（重量↔体積）
+            if (baseUnitType === 'weight' && !isWeight) { // 計算基準が重量(kg)だが、表示が体積(L)の場合
+                V_i_base = liquid.V_i / liquid.density;
+            } else if (baseUnitType === 'volume' && isWeight) { // 計算基準が体積(L)だが、表示が重量(kg)の場合
+                V_i_base = liquid.V_i * liquid.density;
+            }
+
+            const V_i_final = V_i_base * (1 + lossRate) * factor;
+            document.getElementById(`result_${liquid.id}`).textContent = `${V_i_final.toFixed(2)} ${unitLabel}`;
+        });
+        
+        // 合計・希釈液の表示
+        let V_mix_base = V_mix;
+        let V_thinner_base = V_thinner;
+        let V_total_base = V_total;
+        
+        // **注意: 混合液や希釈液全体の密度は平均密度計算が必要だが、ここでは簡略化し、単に基準単位で計算結果を表示**
+        // 相互変換が必要な場合、ユーザーに「密度入力」を促しているため、ここでは単純表示。
+
+        const V_mix_final = V_mix_base * (1 + lossRate) * factor;
+        const V_thinner_final = V_thinner_base * (1 + lossRate) * factor;
+        const V_total_final = V_total_base * (1 + lossRate) * factor;
+
+        document.getElementById('result_V_mix').textContent = `${V_mix_final.toFixed(2)} ${unitLabel}`;
+        document.getElementById('result_V_thinner').textContent = `${V_thinner_final.toFixed(2)} ${unitLabel}`;
+        document.getElementById('result_V_total').textContent = `${V_total_final.toFixed(2)} ${unitLabel}`;
+        document.getElementById('result_A').textContent = `${A_calculated.toFixed(2)} m²`;
+
+        updateBaseValueInput(); // 単位の再表示
+    }
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
