@@ -11,7 +11,11 @@
       "Bash(git commit -m \"$(cat <<''EOF''\nfix: デフォルトタイマーの時刻を変更\n\n- 起床時刻: 07:00\n- 就寝時間: 24:00\n- 不要な「2023年残り」を削除\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
       "Bash(git commit -m \"$(cat <<''EOF''\nfeat: タイマーグループ（プロファイル）機能を追加\n\n- 複数のタイマーグループを作成・管理可能に\n- DDLでグループを切り替え（仕事用、家庭用など）\n- グループの追加・名前変更・削除に対応\n- Cookie構造を新形式（{active, groups}）に変更\n- 旧形式（配列）からの自動マイグレーション\n- エクスポート/インポートを新形式に対応\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
       "Bash(git commit -m \"$(cat <<''EOF''\nfix: 旧形式JSONのマイグレーション時にtargetTimeを検証・修正\n\n- validateTargetTime関数を追加\n- \"21:00:00:00\"のような不正な形式を\"21:00:00\"に自動修正\n- マイグレーション時に即座にCookieに保存して新形式に移行\n- JSONインポート時にも同様の検証・修正を適用\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git mv:*)",
+      "Bash(gh.exe pr create:*)",
+      "Bash(gh pr create:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []
