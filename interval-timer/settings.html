@@ -127,7 +127,7 @@
     <!-- 操作ボタン -->
     <div class="row mb-4">
         <div class="col">
-            <div class="d-flex gap-2">
+            <div class="d-flex gap-2 flex-wrap">
                 <button type="button" class="btn btn-primary btn-lg" id="saveBtn">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                         <path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425a.247.247 0 0 1 .02-.022"/>
@@ -137,6 +137,20 @@
                 <a href="index.html" class="btn btn-outline-primary">
                     タイマー画面へ
                 </a>
+                <button type="button" class="btn btn-outline-secondary" id="exportBtn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"/>
+                        <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+                    </svg>
+                    Export
+                </button>
+                <button type="button" class="btn btn-outline-secondary" id="importBtn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"/>
+                        <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
+                    </svg>
+                    Import
+                </button>
             </div>
         </div>
     </div>
@@ -279,6 +293,72 @@
     </div>
 </div>
 
+<!-- Export モーダル -->
+<div class="modal fade" id="exportModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">設定をエクスポート</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">以下のJSONをコピーして保存してください。</p>
+                <textarea class="form-control" id="exportJson" rows="15" readonly></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+                <button type="button" class="btn btn-primary" id="copyExportBtn">コピー</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Import モーダル -->
+<div class="modal fade" id="importModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">設定をインポート</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">エクスポートしたJSONを貼り付けてください。</p>
+                <div class="alert alert-warning">
+                    <strong>注意:</strong> インポートすると現在の設定は上書きされます。
+                </div>
+                <textarea class="form-control" id="importJson" rows="15" placeholder="JSONを貼り付け..."></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-primary" id="executeImportBtn">インポート</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Migration確認モーダル -->
+<div class="modal fade" id="migrationModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">設定データの移行</h5>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <strong>Cookieに保存された設定データが見つかりました。</strong><br>
+                    このデータをlocalStorageに移行しますか？
+                </div>
+                <p class="text-muted">移行するデータの内容:</p>
+                <textarea class="form-control" id="migrationPreview" rows="10" readonly></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-danger" id="discardMigrationBtn">破棄する</button>
+                <button type="button" class="btn btn-primary" id="executeMigrationBtn">移行する</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
 <script>
@@ -323,15 +403,27 @@ $(document).ready(function() {
     let settings = { active: 0, groups: [] };
     let editingGroupIndex = -1;
     let editingPresetIndex = -1;
-    let groupModal, presetModal;
+    let groupModal, presetModal, exportModal, importModal, migrationModal;
     let draggedItem = null;
 
     function init() {
         groupModal = new bootstrap.Modal(document.getElementById('groupModal'));
         presetModal = new bootstrap.Modal(document.getElementById('presetModal'));
-        loadSettings();
-        renderGroupList();
-        renderPresetList();
+        exportModal = new bootstrap.Modal(document.getElementById('exportModal'));
+        importModal = new bootstrap.Modal(document.getElementById('importModal'));
+        migrationModal = new bootstrap.Modal(document.getElementById('migrationModal'));
+
+        // Cookie移行確認
+        if (settingsStorage.hasCookieData()) {
+            const cookieData = settingsStorage.getCookieData();
+            $('#migrationPreview').val(JSON.stringify(cookieData, null, 2));
+            migrationModal.show();
+        } else {
+            loadSettings();
+            renderGroupList();
+            renderPresetList();
+        }
+
         setupEventListeners();
         updateTotalPreview();
     }
@@ -674,6 +766,64 @@ $(document).ready(function() {
         $('#saveBtn').on('click', function() {
             saveSettings();
             alert('設定を保存しました！');
+        });
+
+        // エクスポート
+        $('#exportBtn').on('click', function() {
+            const json = settingsStorage.export();
+            $('#exportJson').val(json);
+            exportModal.show();
+        });
+
+        // エクスポートコピー
+        $('#copyExportBtn').on('click', function() {
+            $('#exportJson').select();
+            document.execCommand('copy');
+            alert('クリップボードにコピーしました！');
+        });
+
+        // インポート
+        $('#importBtn').on('click', function() {
+            $('#importJson').val('');
+            importModal.show();
+        });
+
+        // インポート実行
+        $('#executeImportBtn').on('click', function() {
+            const json = $('#importJson').val().trim();
+            if (!json) {
+                alert('JSONを入力してください');
+                return;
+            }
+            try {
+                settings = settingsStorage.import(json);
+                renderGroupList();
+                renderPresetList();
+                importModal.hide();
+                alert('インポートしました！');
+            } catch (e) {
+                alert('JSONの形式が正しくありません: ' + e.message);
+            }
+        });
+
+        // Migration実行
+        $('#executeMigrationBtn').on('click', function() {
+            settingsStorage.migrateCookie();
+            loadSettings();
+            renderGroupList();
+            renderPresetList();
+            migrationModal.hide();
+        });
+
+        // Migration破棄
+        $('#discardMigrationBtn').on('click', function() {
+            if (confirm('Cookieのデータを破棄してデフォルト設定を使用します。よろしいですか？')) {
+                settingsStorage.discardCookie();
+                loadSettings();
+                renderGroupList();
+                renderPresetList();
+                migrationModal.hide();
+            }
         });
     }
 

@@ -351,6 +351,29 @@
     </div>
 </div>
 
+<!-- Migration確認モーダル -->
+<div class="modal fade" id="migrationModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">設定データの移行</h5>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <strong>Cookieに保存された設定データが見つかりました。</strong><br>
+                    このデータをlocalStorageに移行しますか？
+                </div>
+                <p class="text-muted">移行するデータの内容:</p>
+                <textarea class="form-control" id="migrationPreview" rows="10" readonly></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-danger" id="discardMigrationBtn">破棄する</button>
+                <button type="button" class="btn btn-primary" id="executeMigrationBtn">移行する</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
 <script>
@@ -377,11 +400,27 @@ $(document).ready(function() {
     let settings = null;
     let timerList = [];
     let editingIndex = -1;
-    let timerModal;
+    let timerModal, migrationModal;
 
     // 初期化
     function init() {
         timerModal = new bootstrap.Modal(document.getElementById('timerModal'));
+        migrationModal = new bootstrap.Modal(document.getElementById('migrationModal'));
+
+        // Cookie移行確認
+        if (settingsStorage.hasCookieData()) {
+            const cookieData = settingsStorage.getCookieData();
+            $('#migrationPreview').val(JSON.stringify(cookieData, null, 2));
+            migrationModal.show();
+            setupEventListeners();
+            return;
+        }
+
+        loadAndRender();
+        setupEventListeners();
+    }
+
+    function loadAndRender() {
         const rawData = settingsStorage.load();
         settings = migrateOldFormat(rawData);
 
@@ -394,7 +433,6 @@ $(document).ready(function() {
         loadCurrentGroup();
         renderTimerList();
         updateJsonTextarea();
-        setupEventListeners();
     }
 
     // targetTimeのフォーマットを検証・修正
@@ -752,6 +790,22 @@ $(document).ready(function() {
             const files = e.dataTransfer.files;
             if (files.length > 0) {
                 importFromFile(files[0]);
+            }
+        });
+
+        // Migration実行
+        $('#executeMigrationBtn').on('click', function() {
+            settingsStorage.migrateCookie();
+            loadAndRender();
+            migrationModal.hide();
+        });
+
+        // Migration破棄
+        $('#discardMigrationBtn').on('click', function() {
+            if (confirm('Cookieのデータを破棄してデフォルト設定を使用します。よろしいですか？')) {
+                settingsStorage.discardCookie();
+                loadAndRender();
+                migrationModal.hide();
             }
         });
     }
