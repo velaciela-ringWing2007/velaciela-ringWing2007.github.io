@@ -499,12 +499,29 @@ $(document).ready(function() {
     }
 
     function loadSettings() {
+        // まずlocalStorageから読み込み
+        const saved = localStorage.getItem('intervalTimerSettings');
+        if (saved) {
+            try {
+                settings = JSON.parse(saved);
+                return;
+            } catch (e) {
+                console.error('Failed to load settings from localStorage:', e);
+            }
+        }
+
+        // localStorageになければCookieから移行
         const cookieValue = document.cookie.replace(/(?:(?:^|.*;\s*)intervalTimerSettings\s*\=\s*([^;]*).*$)|^.*$/, '$1');
         if (cookieValue) {
             try {
                 settings = JSON.parse(decodeURIComponent(cookieValue));
+                // localStorageに保存して移行完了
+                localStorage.setItem('intervalTimerSettings', JSON.stringify(settings));
+                // 古いCookieを削除
+                document.cookie = 'intervalTimerSettings=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+                console.log('Settings migrated from Cookie to localStorage');
             } catch (e) {
-                console.error('Failed to load settings:', e);
+                console.error('Failed to migrate settings from Cookie:', e);
             }
         }
     }

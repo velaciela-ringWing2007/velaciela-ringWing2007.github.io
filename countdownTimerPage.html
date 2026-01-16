@@ -111,7 +111,7 @@
     </div>
     <div class="row">
         <div class="col-12" style="margin-top:10px;">
-            <p class="note-text">※設定情報はCookieに保存しています。Cookieを削除したり、1年以上この画面を開いたまま放置すると、設定情報がリセットされます。時々リロードしてください。</p>
+            <p class="note-text">※設定情報はlocalStorageに保存しています。ブラウザのデータを削除すると設定情報がリセットされます。</p>
         </div>
     </div>
 
@@ -303,18 +303,33 @@
         }
 
         function saveSettingsToCookie(data) {
-            const expirationDate = new Date();
-            expirationDate.setFullYear(expirationDate.getFullYear() + 1);
-            document.cookie = `timerList=${encodeURIComponent(JSON.stringify(data))}; expires=${expirationDate.toUTCString()}; path=/; SameSite=Lax; Secure`;
+            localStorage.setItem('timerList', JSON.stringify(data));
         }
 
         function loadSettingsFromCookie() {
+            // まずlocalStorageから読み込み
+            const saved = localStorage.getItem('timerList');
+            if (saved) {
+                try {
+                    return JSON.parse(saved);
+                } catch (e) {
+                    console.error('Failed to parse settings from localStorage:', e);
+                }
+            }
+
+            // localStorageになければCookieから移行
             const cookieValue = document.cookie.replace(/(?:(?:^|.*;\s*)timerList\s*\=\s*([^;]*).*$)|^.*$/, '$1');
             if (cookieValue) {
                 try {
-                    return JSON.parse(decodeURIComponent(cookieValue));
+                    const data = JSON.parse(decodeURIComponent(cookieValue));
+                    // localStorageに保存して移行完了
+                    localStorage.setItem('timerList', JSON.stringify(data));
+                    // 古いCookieを削除
+                    document.cookie = 'timerList=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+                    console.log('Settings migrated from Cookie to localStorage');
+                    return data;
                 } catch (e) {
-                    console.error('Failed to parse settings from cookie:', e);
+                    console.error('Failed to migrate settings from Cookie:', e);
                 }
             }
             return null;
@@ -403,7 +418,7 @@
                 settings.active = 0;
             }
 
-            saveSettingsToCookie(settings); // 起動時にクッキーに保存して有効期間を伸ばす
+            saveSettingsToCookie(settings);
 
             renderGroupSelect();
             renderTimers();

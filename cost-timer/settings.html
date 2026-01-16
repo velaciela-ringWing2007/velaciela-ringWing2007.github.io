@@ -57,7 +57,7 @@
                 </ol>
             </nav>
             <h2>コストタイマー設定</h2>
-            <p class="text-muted">参加者プリセットを管理します。設定はCookieに保存されます。</p>
+            <p class="text-muted">参加者プリセットを管理します。設定はlocalStorageに保存されます。</p>
         </div>
     </div>
 
@@ -201,23 +201,39 @@ $(document).ready(function() {
     }
 
     function loadSettings() {
+        // まずlocalStorageから読み込み
+        const saved = localStorage.getItem('costTimerSettings');
+        if (saved) {
+            try {
+                settings = JSON.parse(saved);
+                return;
+            } catch (e) {
+                console.error('Failed to load settings from localStorage:', e);
+            }
+        }
+
+        // localStorageになければCookieから移行
         const cookieValue = document.cookie.replace(/(?:(?:^|.*;\s*)costTimerSettings\s*\=\s*([^;]*).*$)|^.*$/, '$1');
         if (cookieValue) {
             try {
                 settings = JSON.parse(decodeURIComponent(cookieValue));
+                // localStorageに保存して移行完了
+                localStorage.setItem('costTimerSettings', JSON.stringify(settings));
+                // 古いCookieを削除
+                document.cookie = 'costTimerSettings=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+                console.log('Settings migrated from Cookie to localStorage');
+                return;
             } catch (e) {
-                console.error('Failed to load settings:', e);
-                settings = JSON.parse(JSON.stringify(defaultSettings));
+                console.error('Failed to migrate settings from Cookie:', e);
             }
-        } else {
-            settings = JSON.parse(JSON.stringify(defaultSettings));
         }
+
+        // どちらにもなければデフォルト
+        settings = JSON.parse(JSON.stringify(defaultSettings));
     }
 
     function saveSettings() {
-        const expirationDate = new Date();
-        expirationDate.setFullYear(expirationDate.getFullYear() + 1);
-        document.cookie = `costTimerSettings=${encodeURIComponent(JSON.stringify(settings))}; expires=${expirationDate.toUTCString()}; path=/; SameSite=Lax; Secure`;
+        localStorage.setItem('costTimerSettings', JSON.stringify(settings));
     }
 
     function renderPresetList() {
