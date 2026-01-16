@@ -206,6 +206,26 @@
         a { color: var(--color-link); }
         a:hover { color: var(--color-link-hover); }
 
+        /* Form elements theming */
+        .form-select {
+            background-color: var(--bg-card);
+            color: var(--text-primary);
+            border-color: var(--border-color, var(--bg-progress));
+        }
+        .form-select:focus {
+            background-color: var(--bg-card);
+            color: var(--text-primary);
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 0.25rem rgba(var(--accent-rgb, 13, 110, 253), 0.25);
+        }
+        .form-select option {
+            background-color: var(--bg-card);
+            color: var(--text-primary);
+        }
+        .form-label {
+            color: var(--text-secondary);
+        }
+
         /* Light theme adjustments */
         [data-theme="white"] .btn-outline-light,
         [data-theme="pink"] .btn-outline-light,
