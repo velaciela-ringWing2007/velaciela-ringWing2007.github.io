@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>インターバルタイマー</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet"
+          crossorigin="anonymous">
+    <link rel="stylesheet" href="../common/themes.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body {
+            margin: 30px 10px;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: var(--font-display);
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--scanline);
+            pointer-events: none;
+            z-index: 9999;
+        }
+        .timer-container {
+            background: var(--bg-card);
+            border-radius: var(--card-radius);
+            border: var(--card-border);
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: var(--glow-effect);
+        }
+        .preset-card {
+            background: var(--bg-card-alt);
+            border: var(--card-border);
+            border-radius: var(--card-radius);
+            padding: 15px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .preset-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .preset-card.active {
+            border: 2px solid var(--accent-color);
+            background: var(--bg-card);
+        }
+        .preset-name {
+            font-weight: bold;
+            color: var(--text-primary);
+            margin-bottom: 5px;
+        }
+        .preset-info {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+        .phase-display {
+            font-size: 2rem;
+            font-weight: bold;
+            text-align: center;
+            padding: 15px;
+            border-radius: var(--card-radius);
+            margin-bottom: 20px;
+        }
+        .phase-warmup {
+            background: linear-gradient(135deg, #f59e0b, #fbbf24);
+            color: #000;
+        }
+        .phase-work {
+            background: linear-gradient(135deg, #22c55e, #4ade80);
+            color: #000;
+        }
+        .phase-rest {
+            background: linear-gradient(135deg, #3b82f6, #60a5fa);
+            color: #fff;
+        }
+        .phase-completed {
+            background: linear-gradient(135deg, #a855f7, #c084fc);
+            color: #fff;
+        }
+        .phase-idle {
+            background: var(--bg-card-alt);
+            color: var(--text-secondary);
+        }
+        .timer-value {
+            font-family: var(--font-display);
+            font-size: 6rem;
+            font-weight: bold;
+            text-align: center;
+            text-shadow: var(--glow-effect);
+            color: var(--text-primary);
+            line-height: 1;
+        }
+        .progress-container {
+            background: var(--bg-progress);
+            border-radius: var(--card-radius);
+            height: 20px;
+            overflow: hidden;
+            margin: 15px 0;
+            border: var(--card-border);
+        }
+        .progress-bar-custom {
+            height: 100%;
+            transition: width 0.1s linear;
+        }
+        .progress-work {
+            background: linear-gradient(90deg, #22c55e, #4ade80);
+        }
+        .progress-rest {
+            background: linear-gradient(90deg, #3b82f6, #60a5fa);
+        }
+        .progress-warmup {
+            background: linear-gradient(90deg, #f59e0b, #fbbf24);
+        }
+        .iteration-display {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .iteration-text {
+            font-size: 1.5rem;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+        }
+        .iteration-current {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--text-primary);
+        }
+        .iteration-dots {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 15px 0;
+        }
+        .iteration-dot {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--bg-progress);
+            border: 2px solid var(--text-muted);
+            transition: all 0.3s ease;
+        }
+        .iteration-dot.completed {
+            background: var(--color-elapsed);
+            border-color: var(--color-elapsed);
+        }
+        .iteration-dot.current {
+            background: var(--accent-color);
+            border-color: var(--accent-color);
+            transform: scale(1.3);
+            animation: pulse 1s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1.3); }
+            50% { transform: scale(1.5); }
+        }
+        .overall-progress {
+            background: var(--bg-progress);
+            border-radius: var(--card-radius);
+            height: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .overall-progress-bar {
+            height: 100%;
+            background: var(--progress-gradient);
+            transition: width 0.5s ease;
+        }
+        .btn-start { background-color: var(--btn-start); border-color: var(--btn-start); color: #fff; }
+        .btn-start:hover { background-color: var(--btn-start-hover); border-color: var(--btn-start-hover); color: #fff; }
+        .btn-pause { background-color: var(--btn-pause); border-color: var(--btn-pause); color: #000; }
+        .btn-pause:hover { background-color: var(--btn-pause-hover); border-color: var(--btn-pause-hover); color: #000; }
+        .btn-stop { background-color: var(--btn-stop); border-color: var(--btn-stop); color: #fff; }
+        .btn-stop:hover { background-color: var(--btn-stop-hover); border-color: var(--btn-stop-hover); color: #fff; }
+        .btn-reset { background-color: var(--btn-reset); border-color: var(--btn-reset); color: #fff; }
+        .btn-reset:hover { opacity: 0.8; }
+        .settings-info {
+            background: var(--bg-card-alt);
+            border-radius: var(--card-radius);
+            padding: 15px;
+            margin-top: 15px;
+        }
+        .settings-info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid var(--bg-progress);
+        }
+        .settings-info-row:last-child {
+            border-bottom: none;
+        }
+        .settings-info-label {
+            color: var(--text-secondary);
+        }
+        .settings-info-value {
+            color: var(--text-primary);
+            font-weight: bold;
+        }
+        a { color: var(--color-link); }
+        a:hover { color: var(--color-link-hover); }
+
+        /* Light theme adjustments */
+        [data-theme="white"] .btn-outline-light,
+        [data-theme="pink"] .btn-outline-light,
+        [data-theme="aqua"] .btn-outline-light {
+            color: #495057;
+            border-color: #6c757d;
+        }
+        [data-theme="white"] .btn-outline-light:hover,
+        [data-theme="pink"] .btn-outline-light:hover,
+        [data-theme="aqua"] .btn-outline-light:hover {
+            background-color: #6c757d;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="row mb-3">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="../index.html">ホーム</a></li>
+                    <li class="breadcrumb-item active">インターバルタイマー</li>
+                </ol>
+            </nav>
+            <div class="d-flex justify-content-between align-items-center">
+                <h2>インターバルタイマー</h2>
+                <div class="d-flex gap-2 align-items-center">
+                    <select class="form-select form-select-sm theme-selector" id="themeSelect" style="width: auto;">
+                        <option value="white">White</option>
+                        <option value="dark">Dark</option>
+                        <option value="terminal">Terminal Green</option>
+                        <option value="nerv">NERV Orange</option>
+                        <option value="neon">Neon Cyber</option>
+                        <option value="midnight">Midnight Purple</option>
+                        <option value="ocean">Ocean Deep</option>
+                        <option value="sunset">Sunset</option>
+                        <option value="amber">Retro Amber</option>
+                        <option value="pink">Pop Pink</option>
+                        <option value="aqua">Pop Aqua</option>
+                    </select>
+                    <a href="settings.html" class="btn btn-outline-light btn-sm">設定</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- グループ選択 -->
+    <div class="row mb-3">
+        <div class="col">
+            <label class="form-label">グループ</label>
+            <select class="form-select" id="groupSelect"></select>
+        </div>
+    </div>
+
+    <!-- プリセット選択 -->
+    <div class="row mb-4">
+        <div class="col">
+            <label class="form-label">プリセット</label>
+            <div id="presetList" class="row g-2"></div>
+        </div>
+    </div>
+
+    <!-- タイマー表示エリア -->
+    <div class="timer-container">
+        <!-- フェーズ表示 -->
+        <div class="phase-display phase-idle" id="phaseDisplay">
+            準備完了
+        </div>
+
+        <!-- タイマー表示 -->
+        <div class="timer-value" id="timerValue">00:00</div>
+
+        <!-- フェーズ進捗バー -->
+        <div class="progress-container">
+            <div class="progress-bar-custom progress-work" id="phaseProgressBar" style="width: 0%"></div>
+        </div>
+
+        <!-- イテレーション表示 -->
+        <div class="iteration-display">
+            <div class="iteration-text">
+                セット: <span class="iteration-current" id="iterationText">0 / 0</span>
+            </div>
+            <div class="iteration-dots" id="iterationDots"></div>
+            <div class="overall-progress">
+                <div class="overall-progress-bar" id="overallProgressBar" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <!-- コントロールボタン -->
+        <div class="text-center mt-4">
+            <button class="btn btn-start btn-lg me-2" id="startBtn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="m11.596 8.697-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/>
+                </svg>
+                開始
+            </button>
+            <button class="btn btn-pause btn-lg me-2" id="pauseBtn" style="display: none;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M5.5 3.5A1.5 1.5 0 0 1 7 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5m5 0A1.5 1.5 0 0 1 12 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5"/>
+                </svg>
+                一時停止
+            </button>
+            <button class="btn btn-start btn-lg me-2" id="resumeBtn" style="display: none;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="m11.596 8.697-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/>
+                </svg>
+                再開
+            </button>
+            <button class="btn btn-stop btn-lg me-2" id="stopBtn" style="display: none;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M5 3.5h6A1.5 1.5 0 0 1 12.5 5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 11V5A1.5 1.5 0 0 1 5 3.5"/>
+                </svg>
+                停止
+            </button>
+            <button class="btn btn-reset btn-lg" id="resetBtn">
+                リセット
+            </button>
+        </div>
+    </div>
+
+    <!-- 設定詳細 -->
+    <div class="settings-info" id="settingsInfo">
+        <h5 class="mb-3">選択中のプリセット</h5>
+        <div class="settings-info-row">
+            <span class="settings-info-label">運動時間</span>
+            <span class="settings-info-value" id="infoWorkDuration">--</span>
+        </div>
+        <div class="settings-info-row">
+            <span class="settings-info-label">休憩時間</span>
+            <span class="settings-info-value" id="infoRestDuration">--</span>
+        </div>
+        <div class="settings-info-row">
+            <span class="settings-info-label">繰り返し回数</span>
+            <span class="settings-info-value" id="infoIterations">--</span>
+        </div>
+        <div class="settings-info-row">
+            <span class="settings-info-label">準備時間</span>
+            <span class="settings-info-value" id="infoWarmupDuration">--</span>
+        </div>
+        <div class="settings-info-row">
+            <span class="settings-info-label">合計時間</span>
+            <span class="settings-info-value" id="infoTotalTime">--</span>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
+<script>
+$(document).ready(function() {
+    // デフォルト設定
+    const defaultSettings = {
+        active: 0,
+        groups: [
+            {
+                name: "トレーニング",
+                presets: [
+                    {
+                        id: "preset_tabata",
+                        name: "タバタ式",
+                        workDuration: 20,
+                        restDuration: 10,
+                        iterations: 8,
+                        warmupDuration: 10
+                    },
+                    {
+                        id: "preset_hiit",
+                        name: "HIIT基本",
+                        workDuration: 30,
+                        restDuration: 30,
+                        iterations: 10,
+                        warmupDuration: 10
+                    },
+                    {
+                        id: "preset_pomodoro",
+                        name: "ポモドーロ",
+                        workDuration: 1500,
+                        restDuration: 300,
+                        iterations: 4,
+                        warmupDuration: 5
+                    }
+                ]
+            }
+        ]
+    };
+
+    let settings = JSON.parse(JSON.stringify(defaultSettings));
+    let selectedPreset = null;
+
+    // タイマー状態
+    let timerState = {
+        status: 'idle', // idle, warmup, work, rest, paused, completed
+        currentIteration: 0,
+        remainingTime: 0,
+        phaseStartTime: null,
+        pausedRemainingTime: 0,
+        previousPhase: null,
+        intervalId: null
+    };
+
+    // Web Audio API
+    let audioContext = null;
+
+    function initAudio() {
+        if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioContext.state === 'suspended') {
+            audioContext.resume();
+        }
+    }
+
+    function playBeep(frequency, duration, type = 'sine') {
+        if (!audioContext) return;
+
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        oscillator.frequency.value = frequency;
+        oscillator.type = type;
+
+        gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + duration);
+    }
+
+    function playWorkSound() {
+        playBeep(880, 0.3); // 高音
+        setTimeout(() => playBeep(880, 0.3), 150);
+    }
+
+    function playRestSound() {
+        playBeep(440, 0.4); // 低音
+    }
+
+    function playCountdownSound() {
+        playBeep(660, 0.15);
+    }
+
+    function playCompleteSound() {
+        playBeep(523, 0.2);
+        setTimeout(() => playBeep(659, 0.2), 200);
+        setTimeout(() => playBeep(784, 0.4), 400);
+    }
+
+    // 初期化
+    function init() {
+        loadTheme();
+        loadSettings();
+        renderGroups();
+        renderPresets();
+        setupEventListeners();
+        selectFirstPreset();
+    }
+
+    function loadTheme() {
+        const savedTheme = localStorage.getItem('intervalTimerTheme') || 'dark';
+        document.body.setAttribute('data-theme', savedTheme);
+        $('#themeSelect').val(savedTheme);
+    }
+
+    function saveTheme(theme) {
+        localStorage.setItem('intervalTimerTheme', theme);
+        document.body.setAttribute('data-theme', theme);
+    }
+
+    function loadSettings() {
+        const cookieValue = document.cookie.replace(/(?:(?:^|.*;\s*)intervalTimerSettings\s*\=\s*([^;]*).*$)|^.*$/, '$1');
+        if (cookieValue) {
+            try {
+                settings = JSON.parse(decodeURIComponent(cookieValue));
+            } catch (e) {
+                console.error('Failed to load settings:', e);
+            }
+        }
+    }
+
+    function renderGroups() {
+        const $select = $('#groupSelect');
+        $select.empty();
+        settings.groups.forEach((group, index) => {
+            $select.append(`<option value="${index}">${escapeHtml(group.name)}</option>`);
+        });
+        $select.val(settings.active);
+    }
+
+    function renderPresets() {
+        const $list = $('#presetList');
+        $list.empty();
+
+        const activeGroup = settings.groups[settings.active];
+        if (!activeGroup || activeGroup.presets.length === 0) {
+            $list.append('<div class="col-12 text-center text-muted py-4">プリセットがありません。設定画面から追加してください。</div>');
+            return;
+        }
+
+        activeGroup.presets.forEach((preset, index) => {
+            const totalTime = calculateTotalTime(preset);
+            $list.append(`
+                <div class="col-md-4 col-sm-6">
+                    <div class="preset-card" data-index="${index}">
+                        <div class="preset-name">${escapeHtml(preset.name)}</div>
+                        <div class="preset-info">
+                            ${formatDuration(preset.workDuration)} / ${formatDuration(preset.restDuration)} × ${preset.iterations}回
+                        </div>
+                        <div class="preset-info">合計: ${formatDuration(totalTime)}</div>
+                    </div>
+                </div>
+            `);
+        });
+    }
+
+    function selectFirstPreset() {
+        const activeGroup = settings.groups[settings.active];
+        if (activeGroup && activeGroup.presets.length > 0) {
+            selectPreset(0);
+        }
+    }
+
+    function selectPreset(index) {
+        const activeGroup = settings.groups[settings.active];
+        if (!activeGroup || index >= activeGroup.presets.length) return;
+
+        selectedPreset = activeGroup.presets[index];
+
+        // UIの更新
+        $('.preset-card').removeClass('active');
+        $(`.preset-card[data-index="${index}"]`).addClass('active');
+
+        updateSettingsInfo();
+        updateIterationDots();
+        resetTimerDisplay();
+    }
+
+    function updateSettingsInfo() {
+        if (!selectedPreset) return;
+
+        $('#infoWorkDuration').text(formatDuration(selectedPreset.workDuration));
+        $('#infoRestDuration').text(formatDuration(selectedPreset.restDuration));
+        $('#infoIterations').text(selectedPreset.iterations + '回');
+        $('#infoWarmupDuration').text(formatDuration(selectedPreset.warmupDuration));
+
+        const totalTime = calculateTotalTime(selectedPreset);
+        $('#infoTotalTime').text(formatDuration(totalTime));
+    }
+
+    function updateIterationDots() {
+        const $dots = $('#iterationDots');
+        $dots.empty();
+
+        if (!selectedPreset) return;
+
+        for (let i = 0; i < selectedPreset.iterations; i++) {
+            let dotClass = 'iteration-dot';
+            if (i < timerState.currentIteration) {
+                dotClass += ' completed';
+            } else if (i === timerState.currentIteration && timerState.status !== 'idle' && timerState.status !== 'completed') {
+                dotClass += ' current';
+            }
+            $dots.append(`<div class="${dotClass}"></div>`);
+        }
+
+        $('#iterationText').text(`${timerState.currentIteration} / ${selectedPreset.iterations}`);
+    }
+
+    function calculateTotalTime(preset) {
+        return preset.warmupDuration + (preset.workDuration + preset.restDuration) * preset.iterations - preset.restDuration;
+    }
+
+    function formatDuration(seconds) {
+        if (seconds >= 60) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            if (secs === 0) {
+                return `${mins}分`;
+            }
+            return `${mins}分${secs}秒`;
+        }
+        return `${seconds}秒`;
+    }
+
+    function formatTimer(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function resetTimerDisplay() {
+        timerState = {
+            status: 'idle',
+            currentIteration: 0,
+            remainingTime: 0,
+            phaseStartTime: null,
+            pausedRemainingTime: 0,
+            previousPhase: null,
+            intervalId: null
+        };
+
+        $('#timerValue').text('00:00');
+        $('#phaseDisplay').removeClass('phase-warmup phase-work phase-rest phase-completed').addClass('phase-idle').text('準備完了');
+        $('#phaseProgressBar').css('width', '0%');
+        $('#overallProgressBar').css('width', '0%');
+        updateIterationDots();
+
+        $('#startBtn').show();
+        $('#pauseBtn, #resumeBtn, #stopBtn').hide();
+    }
+
+    function startTimer() {
+        if (!selectedPreset) {
+            alert('プリセットを選択してください');
+            return;
+        }
+
+        initAudio();
+
+        timerState.status = 'warmup';
+        timerState.currentIteration = 0;
+        timerState.remainingTime = selectedPreset.warmupDuration;
+        timerState.phaseStartTime = Date.now();
+
+        updatePhaseDisplay();
+
+        $('#startBtn').hide();
+        $('#pauseBtn, #stopBtn').show();
+
+        timerState.intervalId = setInterval(updateTimer, 100);
+    }
+
+    function updateTimer() {
+        if (timerState.status === 'paused' || timerState.status === 'completed' || timerState.status === 'idle') return;
+
+        const elapsed = (Date.now() - timerState.phaseStartTime) / 1000;
+        let phaseDuration;
+
+        switch (timerState.status) {
+            case 'warmup':
+                phaseDuration = selectedPreset.warmupDuration;
+                break;
+            case 'work':
+                phaseDuration = selectedPreset.workDuration;
+                break;
+            case 'rest':
+                phaseDuration = selectedPreset.restDuration;
+                break;
+            default:
+                return;
+        }
+
+        timerState.remainingTime = Math.max(0, phaseDuration - elapsed);
+
+        // カウントダウン音（残り3秒以内）
+        const remaining = Math.ceil(timerState.remainingTime);
+        if (remaining <= 3 && remaining > 0 && remaining !== timerState.lastCountdown) {
+            timerState.lastCountdown = remaining;
+            playCountdownSound();
+        }
+
+        // 表示更新
+        $('#timerValue').text(formatTimer(Math.ceil(timerState.remainingTime)));
+
+        // フェーズ進捗バー
+        const phaseProgress = (elapsed / phaseDuration) * 100;
+        $('#phaseProgressBar').css('width', Math.min(phaseProgress, 100) + '%');
+
+        // 全体進捗バー
+        updateOverallProgress();
+
+        // フェーズ終了チェック
+        if (timerState.remainingTime <= 0) {
+            nextPhase();
+        }
+    }
+
+    function updateOverallProgress() {
+        if (!selectedPreset) return;
+
+        const totalTime = calculateTotalTime(selectedPreset);
+        let elapsed = 0;
+
+        // 完了したウォームアップ
+        if (timerState.status !== 'warmup') {
+            elapsed += selectedPreset.warmupDuration;
+        } else {
+            elapsed += selectedPreset.warmupDuration - timerState.remainingTime;
+            const progress = (elapsed / totalTime) * 100;
+            $('#overallProgressBar').css('width', progress + '%');
+            return;
+        }
+
+        // 完了したイテレーション
+        elapsed += timerState.currentIteration * (selectedPreset.workDuration + selectedPreset.restDuration);
+
+        // 現在のフェーズの経過
+        if (timerState.status === 'work') {
+            elapsed += selectedPreset.workDuration - timerState.remainingTime;
+        } else if (timerState.status === 'rest') {
+            elapsed += selectedPreset.workDuration + (selectedPreset.restDuration - timerState.remainingTime);
+        }
+
+        const progress = (elapsed / totalTime) * 100;
+        $('#overallProgressBar').css('width', Math.min(progress, 100) + '%');
+    }
+
+    function nextPhase() {
+        timerState.lastCountdown = null;
+
+        switch (timerState.status) {
+            case 'warmup':
+                // 運動フェーズへ
+                timerState.status = 'work';
+                timerState.currentIteration = 1;
+                timerState.remainingTime = selectedPreset.workDuration;
+                playWorkSound();
+                break;
+
+            case 'work':
+                if (timerState.currentIteration >= selectedPreset.iterations) {
+                    // 完了
+                    completeTimer();
+                    return;
+                }
+                // 休憩フェーズへ
+                timerState.status = 'rest';
+                timerState.remainingTime = selectedPreset.restDuration;
+                playRestSound();
+                break;
+
+            case 'rest':
+                // 次のイテレーションの運動フェーズへ
+                timerState.status = 'work';
+                timerState.currentIteration++;
+                timerState.remainingTime = selectedPreset.workDuration;
+                playWorkSound();
+                break;
+        }
+
+        timerState.phaseStartTime = Date.now();
+        updatePhaseDisplay();
+        updateIterationDots();
+    }
+
+    function updatePhaseDisplay() {
+        const $phase = $('#phaseDisplay');
+        const $progressBar = $('#phaseProgressBar');
+
+        $phase.removeClass('phase-idle phase-warmup phase-work phase-rest phase-completed');
+        $progressBar.removeClass('progress-warmup progress-work progress-rest');
+
+        switch (timerState.status) {
+            case 'warmup':
+                $phase.addClass('phase-warmup').html('🔥 準備中');
+                $progressBar.addClass('progress-warmup');
+                break;
+            case 'work':
+                $phase.addClass('phase-work').html('🏃 運動中');
+                $progressBar.addClass('progress-work');
+                break;
+            case 'rest':
+                $phase.addClass('phase-rest').html('😴 休憩中');
+                $progressBar.addClass('progress-rest');
+                break;
+            case 'completed':
+                $phase.addClass('phase-completed').html('🎉 完了!');
+                break;
+            default:
+                $phase.addClass('phase-idle').text('準備完了');
+        }
+    }
+
+    function pauseTimer() {
+        if (timerState.status === 'idle' || timerState.status === 'completed' || timerState.status === 'paused') return;
+
+        timerState.previousPhase = timerState.status;
+        timerState.status = 'paused';
+        timerState.pausedRemainingTime = timerState.remainingTime;
+
+        $('#pauseBtn').hide();
+        $('#resumeBtn').show();
+    }
+
+    function resumeTimer() {
+        if (timerState.status !== 'paused') return;
+
+        timerState.status = timerState.previousPhase;
+        timerState.phaseStartTime = Date.now() - ((getPhaseDuration() - timerState.pausedRemainingTime) * 1000);
+
+        $('#resumeBtn').hide();
+        $('#pauseBtn').show();
+    }
+
+    function getPhaseDuration() {
+        switch (timerState.previousPhase || timerState.status) {
+            case 'warmup': return selectedPreset.warmupDuration;
+            case 'work': return selectedPreset.workDuration;
+            case 'rest': return selectedPreset.restDuration;
+            default: return 0;
+        }
+    }
+
+    function stopTimer() {
+        if (timerState.intervalId) {
+            clearInterval(timerState.intervalId);
+            timerState.intervalId = null;
+        }
+        resetTimerDisplay();
+    }
+
+    function completeTimer() {
+        if (timerState.intervalId) {
+            clearInterval(timerState.intervalId);
+            timerState.intervalId = null;
+        }
+
+        timerState.status = 'completed';
+        timerState.remainingTime = 0;
+
+        playCompleteSound();
+
+        $('#timerValue').text('00:00');
+        $('#phaseProgressBar').css('width', '100%');
+        $('#overallProgressBar').css('width', '100%');
+        updatePhaseDisplay();
+        updateIterationDots();
+
+        $('#pauseBtn, #resumeBtn, #stopBtn').hide();
+        $('#startBtn').show();
+    }
+
+    function setupEventListeners() {
+        // テーマ切り替え
+        $('#themeSelect').on('change', function() {
+            saveTheme($(this).val());
+        });
+
+        // グループ切り替え
+        $('#groupSelect').on('change', function() {
+            settings.active = parseInt($(this).val());
+            renderPresets();
+            selectFirstPreset();
+        });
+
+        // プリセット選択
+        $(document).on('click', '.preset-card', function() {
+            const index = parseInt($(this).data('index'));
+            selectPreset(index);
+        });
+
+        // コントロールボタン
+        $('#startBtn').on('click', function() {
+            if (timerState.status === 'completed') {
+                resetTimerDisplay();
+            }
+            startTimer();
+        });
+
+        $('#pauseBtn').on('click', pauseTimer);
+        $('#resumeBtn').on('click', resumeTimer);
+        $('#stopBtn').on('click', stopTimer);
+        $('#resetBtn').on('click', resetTimerDisplay);
+    }
+
+    init();
+});
+</script>
+</body>
+</html>

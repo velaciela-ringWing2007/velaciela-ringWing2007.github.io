@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>インターバルタイマー設定</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet"
+          crossorigin="anonymous">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body {
+            margin: 30px 10px;
+        }
+        .group-card {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .group-card.active {
+            border-color: #0d6efd;
+            background: #e7f1ff;
+        }
+        .preset-card {
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            cursor: grab;
+        }
+        .preset-card:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .preset-card.dragging {
+            opacity: 0.5;
+        }
+        .preset-info {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        .preset-total {
+            color: #198754;
+            font-weight: bold;
+        }
+        .time-input-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .time-input {
+            width: 70px;
+            text-align: center;
+        }
+        .total-preview {
+            background: #212529;
+            color: #ffc107;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+        .drag-handle {
+            cursor: grab;
+            color: #adb5bd;
+            margin-right: 10px;
+        }
+        .drag-handle:hover {
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="row mb-4">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="../index.html">ホーム</a></li>
+                    <li class="breadcrumb-item"><a href="index.html">インターバルタイマー</a></li>
+                    <li class="breadcrumb-item active">設定</li>
+                </ol>
+            </nav>
+            <h2>インターバルタイマー設定</h2>
+            <p class="text-muted">グループとプリセットを管理します。設定はCookieに保存されます。</p>
+        </div>
+    </div>
+
+    <!-- グループ管理 -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4>グループ</h4>
+                <button type="button" class="btn btn-success" id="addGroupBtn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2"/>
+                    </svg>
+                    グループを追加
+                </button>
+            </div>
+            <div id="groupList"></div>
+        </div>
+    </div>
+
+    <!-- プリセット一覧 -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4>プリセット <span class="text-muted fs-6" id="currentGroupName"></span></h4>
+                <button type="button" class="btn btn-success" id="addPresetBtn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2"/>
+                    </svg>
+                    プリセットを追加
+                </button>
+            </div>
+            <div id="presetList"></div>
+            <div id="emptyPresetMessage" class="text-center text-muted py-4" style="display: none;">
+                プリセットがありません。「プリセットを追加」ボタンで追加してください。
+            </div>
+        </div>
+    </div>
+
+    <!-- 操作ボタン -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-primary btn-lg" id="saveBtn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425a.247.247 0 0 1 .02-.022"/>
+                    </svg>
+                    保存
+                </button>
+                <a href="index.html" class="btn btn-outline-primary">
+                    タイマー画面へ
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- デフォルトプリセット参考 -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">参考: 代表的なインターバルトレーニング</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>名称</th>
+                                <th>運動</th>
+                                <th>休憩</th>
+                                <th>回数</th>
+                                <th>合計</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>タバタ式</td>
+                                <td>20秒</td>
+                                <td>10秒</td>
+                                <td>8回</td>
+                                <td>4分</td>
+                            </tr>
+                            <tr>
+                                <td>HIIT基本</td>
+                                <td>30秒</td>
+                                <td>30秒</td>
+                                <td>10回</td>
+                                <td>10分</td>
+                            </tr>
+                            <tr>
+                                <td>HIIT上級</td>
+                                <td>40秒</td>
+                                <td>20秒</td>
+                                <td>8回</td>
+                                <td>8分</td>
+                            </tr>
+                            <tr>
+                                <td>ポモドーロ</td>
+                                <td>25分</td>
+                                <td>5分</td>
+                                <td>4回</td>
+                                <td>115分</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- グループ編集モーダル -->
+<div class="modal fade" id="groupModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="groupModalTitle">グループを追加</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="groupName" class="form-label">グループ名 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="groupName" placeholder="例: トレーニング">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-primary" id="saveGroupBtn">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- プリセット編集モーダル -->
+<div class="modal fade" id="presetModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="presetModalTitle">プリセットを追加</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="presetName" class="form-label">プリセット名 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="presetName" placeholder="例: タバタ式">
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">運動時間 <span class="text-danger">*</span></label>
+                        <div class="time-input-group">
+                            <input type="number" class="form-control time-input" id="workMinutes" min="0" max="99" value="0">
+                            <span>分</span>
+                            <input type="number" class="form-control time-input" id="workSeconds" min="0" max="59" value="20">
+                            <span>秒</span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">休憩時間 <span class="text-danger">*</span></label>
+                        <div class="time-input-group">
+                            <input type="number" class="form-control time-input" id="restMinutes" min="0" max="99" value="0">
+                            <span>分</span>
+                            <input type="number" class="form-control time-input" id="restSeconds" min="0" max="59" value="10">
+                            <span>秒</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="iterations" class="form-label">繰り返し回数 <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" id="iterations" min="1" max="99" value="8">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">準備時間</label>
+                        <div class="time-input-group">
+                            <input type="number" class="form-control time-input" id="warmupSeconds" min="0" max="60" value="10">
+                            <span>秒</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="total-preview">
+                    合計時間: <span id="totalPreview">--</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-primary" id="savePresetBtn">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
+<script>
+$(document).ready(function() {
+    const defaultSettings = {
+        active: 0,
+        groups: [
+            {
+                name: "トレーニング",
+                presets: [
+                    {
+                        id: "preset_tabata",
+                        name: "タバタ式",
+                        workDuration: 20,
+                        restDuration: 10,
+                        iterations: 8,
+                        warmupDuration: 10
+                    },
+                    {
+                        id: "preset_hiit",
+                        name: "HIIT基本",
+                        workDuration: 30,
+                        restDuration: 30,
+                        iterations: 10,
+                        warmupDuration: 10
+                    },
+                    {
+                        id: "preset_pomodoro",
+                        name: "ポモドーロ",
+                        workDuration: 1500,
+                        restDuration: 300,
+                        iterations: 4,
+                        warmupDuration: 5
+                    }
+                ]
+            }
+        ]
+    };
+
+    let settings = { active: 0, groups: [] };
+    let editingGroupIndex = -1;
+    let editingPresetIndex = -1;
+    let groupModal, presetModal;
+    let draggedItem = null;
+
+    function init() {
+        groupModal = new bootstrap.Modal(document.getElementById('groupModal'));
+        presetModal = new bootstrap.Modal(document.getElementById('presetModal'));
+        loadSettings();
+        renderGroupList();
+        renderPresetList();
+        setupEventListeners();
+        updateTotalPreview();
+    }
+
+    function loadSettings() {
+        const cookieValue = document.cookie.replace(/(?:(?:^|.*;\s*)intervalTimerSettings\s*\=\s*([^;]*).*$)|^.*$/, '$1');
+        if (cookieValue) {
+            try {
+                settings = JSON.parse(decodeURIComponent(cookieValue));
+            } catch (e) {
+                console.error('Failed to load settings:', e);
+                settings = JSON.parse(JSON.stringify(defaultSettings));
+            }
+        } else {
+            settings = JSON.parse(JSON.stringify(defaultSettings));
+        }
+    }
+
+    function saveSettings() {
+        const expirationDate = new Date();
+        expirationDate.setFullYear(expirationDate.getFullYear() + 1);
+        document.cookie = `intervalTimerSettings=${encodeURIComponent(JSON.stringify(settings))}; expires=${expirationDate.toUTCString()}; path=/; SameSite=Lax; Secure`;
+    }
+
+    function renderGroupList() {
+        const $list = $('#groupList');
+        $list.empty();
+
+        if (settings.groups.length === 0) {
+            $list.append('<div class="text-center text-muted py-4">グループがありません。</div>');
+            return;
+        }
+
+        settings.groups.forEach((group, index) => {
+            const isActive = index === settings.active;
+            $list.append(`
+                <div class="group-card ${isActive ? 'active' : ''}" data-index="${index}">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>${escapeHtml(group.name)}</strong>
+                            <span class="badge bg-secondary ms-2">${group.presets.length}件</span>
+                            ${isActive ? '<span class="badge bg-primary ms-2">選択中</span>' : ''}
+                        </div>
+                        <div class="d-flex gap-1">
+                            <button type="button" class="btn btn-sm btn-outline-primary select-group-btn" data-index="${index}" ${isActive ? 'disabled' : ''}>
+                                選択
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary edit-group-btn" data-index="${index}">
+                                編集
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger delete-group-btn" data-index="${index}" ${settings.groups.length <= 1 ? 'disabled' : ''}>
+                                削除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `);
+        });
+    }
+
+    function renderPresetList() {
+        const $list = $('#presetList');
+        $list.empty();
+
+        const activeGroup = settings.groups[settings.active];
+        $('#currentGroupName').text(activeGroup ? `(${activeGroup.name})` : '');
+
+        if (!activeGroup || activeGroup.presets.length === 0) {
+            $('#emptyPresetMessage').show();
+            return;
+        }
+        $('#emptyPresetMessage').hide();
+
+        activeGroup.presets.forEach((preset, index) => {
+            const totalTime = calculateTotalTime(preset);
+            $list.append(`
+                <div class="preset-card" data-index="${index}" draggable="true">
+                    <div class="d-flex align-items-center">
+                        <span class="drag-handle">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M7 2a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0M7 5a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0M7 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0m-3 3a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0m-3 3a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0"/>
+                            </svg>
+                        </span>
+                        <div class="flex-grow-1">
+                            <strong>${escapeHtml(preset.name)}</strong>
+                            <div class="preset-info">
+                                運動: ${formatDuration(preset.workDuration)} / 休憩: ${formatDuration(preset.restDuration)} × ${preset.iterations}回
+                            </div>
+                            <div class="preset-total">合計: ${formatDuration(totalTime)}</div>
+                        </div>
+                        <div class="d-flex gap-1">
+                            <button type="button" class="btn btn-sm btn-outline-primary edit-preset-btn" data-index="${index}">
+                                編集
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger delete-preset-btn" data-index="${index}">
+                                削除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `);
+        });
+
+        // ドラッグ&ドロップ設定
+        setupDragAndDrop();
+    }
+
+    function setupDragAndDrop() {
+        const $cards = $('.preset-card');
+
+        $cards.on('dragstart', function(e) {
+            draggedItem = this;
+            $(this).addClass('dragging');
+            e.originalEvent.dataTransfer.effectAllowed = 'move';
+        });
+
+        $cards.on('dragend', function() {
+            $(this).removeClass('dragging');
+            draggedItem = null;
+        });
+
+        $cards.on('dragover', function(e) {
+            e.preventDefault();
+            e.originalEvent.dataTransfer.dropEffect = 'move';
+
+            const $this = $(this);
+            if (this !== draggedItem) {
+                const rect = this.getBoundingClientRect();
+                const midY = rect.top + rect.height / 2;
+                if (e.clientY < midY) {
+                    $this.before(draggedItem);
+                } else {
+                    $this.after(draggedItem);
+                }
+            }
+        });
+
+        $cards.on('drop', function(e) {
+            e.preventDefault();
+            updatePresetOrder();
+        });
+    }
+
+    function updatePresetOrder() {
+        const activeGroup = settings.groups[settings.active];
+        if (!activeGroup) return;
+
+        const newOrder = [];
+        $('.preset-card').each(function() {
+            const index = parseInt($(this).data('index'));
+            if (!isNaN(index) && activeGroup.presets[index]) {
+                newOrder.push(activeGroup.presets[index]);
+            }
+        });
+
+        activeGroup.presets = newOrder;
+        renderPresetList();
+    }
+
+    function calculateTotalTime(preset) {
+        return preset.warmupDuration + (preset.workDuration + preset.restDuration) * preset.iterations - preset.restDuration;
+    }
+
+    function formatDuration(seconds) {
+        if (seconds >= 60) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            if (secs === 0) {
+                return `${mins}分`;
+            }
+            return `${mins}分${secs}秒`;
+        }
+        return `${seconds}秒`;
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function generateId() {
+        return 'preset_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+
+    function updateTotalPreview() {
+        const workMinutes = parseInt($('#workMinutes').val()) || 0;
+        const workSeconds = parseInt($('#workSeconds').val()) || 0;
+        const restMinutes = parseInt($('#restMinutes').val()) || 0;
+        const restSeconds = parseInt($('#restSeconds').val()) || 0;
+        const iterations = parseInt($('#iterations').val()) || 1;
+        const warmupSeconds = parseInt($('#warmupSeconds').val()) || 0;
+
+        const workDuration = workMinutes * 60 + workSeconds;
+        const restDuration = restMinutes * 60 + restSeconds;
+
+        const total = warmupSeconds + (workDuration + restDuration) * iterations - restDuration;
+        $('#totalPreview').text(formatDuration(Math.max(0, total)));
+    }
+
+    function setupEventListeners() {
+        // グループ追加
+        $('#addGroupBtn').on('click', function() {
+            editingGroupIndex = -1;
+            $('#groupName').val('');
+            $('#groupModalTitle').text('グループを追加');
+            groupModal.show();
+        });
+
+        // グループ選択
+        $(document).on('click', '.select-group-btn', function() {
+            const index = parseInt($(this).data('index'));
+            settings.active = index;
+            renderGroupList();
+            renderPresetList();
+        });
+
+        // グループ編集
+        $(document).on('click', '.edit-group-btn', function() {
+            editingGroupIndex = parseInt($(this).data('index'));
+            const group = settings.groups[editingGroupIndex];
+            $('#groupName').val(group.name);
+            $('#groupModalTitle').text('グループを編集');
+            groupModal.show();
+        });
+
+        // グループ削除
+        $(document).on('click', '.delete-group-btn', function() {
+            if (settings.groups.length <= 1) {
+                alert('最低1つのグループが必要です');
+                return;
+            }
+            const index = parseInt($(this).data('index'));
+            if (confirm(`グループ「${settings.groups[index].name}」を削除しますか？\n含まれるプリセットもすべて削除されます。`)) {
+                settings.groups.splice(index, 1);
+                if (settings.active >= settings.groups.length) {
+                    settings.active = settings.groups.length - 1;
+                }
+                renderGroupList();
+                renderPresetList();
+            }
+        });
+
+        // グループ保存
+        $('#saveGroupBtn').on('click', function() {
+            const name = $('#groupName').val().trim();
+            if (!name) {
+                alert('グループ名を入力してください');
+                return;
+            }
+
+            if (editingGroupIndex >= 0) {
+                settings.groups[editingGroupIndex].name = name;
+            } else {
+                settings.groups.push({ name: name, presets: [] });
+            }
+
+            renderGroupList();
+            groupModal.hide();
+        });
+
+        // プリセット追加
+        $('#addPresetBtn').on('click', function() {
+            editingPresetIndex = -1;
+            $('#presetName').val('');
+            $('#workMinutes').val(0);
+            $('#workSeconds').val(20);
+            $('#restMinutes').val(0);
+            $('#restSeconds').val(10);
+            $('#iterations').val(8);
+            $('#warmupSeconds').val(10);
+            $('#presetModalTitle').text('プリセットを追加');
+            updateTotalPreview();
+            presetModal.show();
+        });
+
+        // プリセット編集
+        $(document).on('click', '.edit-preset-btn', function() {
+            editingPresetIndex = parseInt($(this).data('index'));
+            const activeGroup = settings.groups[settings.active];
+            const preset = activeGroup.presets[editingPresetIndex];
+
+            $('#presetName').val(preset.name);
+            $('#workMinutes').val(Math.floor(preset.workDuration / 60));
+            $('#workSeconds').val(preset.workDuration % 60);
+            $('#restMinutes').val(Math.floor(preset.restDuration / 60));
+            $('#restSeconds').val(preset.restDuration % 60);
+            $('#iterations').val(preset.iterations);
+            $('#warmupSeconds').val(preset.warmupDuration);
+            $('#presetModalTitle').text('プリセットを編集');
+            updateTotalPreview();
+            presetModal.show();
+        });
+
+        // プリセット削除
+        $(document).on('click', '.delete-preset-btn', function() {
+            const index = parseInt($(this).data('index'));
+            const activeGroup = settings.groups[settings.active];
+            if (confirm(`プリセット「${activeGroup.presets[index].name}」を削除しますか？`)) {
+                activeGroup.presets.splice(index, 1);
+                renderPresetList();
+            }
+        });
+
+        // プリセット保存
+        $('#savePresetBtn').on('click', function() {
+            const name = $('#presetName').val().trim();
+            if (!name) {
+                alert('プリセット名を入力してください');
+                return;
+            }
+
+            const workMinutes = parseInt($('#workMinutes').val()) || 0;
+            const workSeconds = parseInt($('#workSeconds').val()) || 0;
+            const restMinutes = parseInt($('#restMinutes').val()) || 0;
+            const restSeconds = parseInt($('#restSeconds').val()) || 0;
+            const iterations = parseInt($('#iterations').val()) || 1;
+            const warmupSeconds = parseInt($('#warmupSeconds').val()) || 0;
+
+            const workDuration = workMinutes * 60 + workSeconds;
+            const restDuration = restMinutes * 60 + restSeconds;
+
+            if (workDuration <= 0) {
+                alert('運動時間は1秒以上に設定してください');
+                return;
+            }
+
+            const activeGroup = settings.groups[settings.active];
+            const preset = {
+                id: editingPresetIndex >= 0 ? activeGroup.presets[editingPresetIndex].id : generateId(),
+                name: name,
+                workDuration: workDuration,
+                restDuration: restDuration,
+                iterations: iterations,
+                warmupDuration: warmupSeconds
+            };
+
+            if (editingPresetIndex >= 0) {
+                activeGroup.presets[editingPresetIndex] = preset;
+            } else {
+                activeGroup.presets.push(preset);
+            }
+
+            renderPresetList();
+            presetModal.hide();
+        });
+
+        // 合計時間プレビュー更新
+        $('#workMinutes, #workSeconds, #restMinutes, #restSeconds, #iterations, #warmupSeconds').on('input', updateTotalPreview);
+
+        // 全体保存
+        $('#saveBtn').on('click', function() {
+            saveSettings();
+            alert('設定を保存しました！');
+        });
+    }
+
+    init();
+});
+</script>
+</body>
+</html>
