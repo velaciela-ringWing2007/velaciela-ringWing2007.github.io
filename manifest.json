@@ -1,0 +1,17 @@
+{
+  "name": "My Github Pages",
+  "short_name": "GH Pages",
+  "description": "タイマー・時計など便利ツール集",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0d6efd",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
