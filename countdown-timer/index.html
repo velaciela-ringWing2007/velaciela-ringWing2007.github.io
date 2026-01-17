@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>カウントダウンタイマー</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet"
+          crossorigin="anonymous">
+    <link rel="stylesheet" href="../common/themes.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="../common/storage.js"></script>
+    <style>
+        /* ===== カウントダウンタイマー固有スタイル ===== */
+        body {
+            margin: 30px 10px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .timer-container {
+            text-align: center;
+            background: var(--bg-card);
+            border-color: var(--border-color) !important;
+            color: var(--text-primary);
+        }
+
+        .timer-container h2 {
+            color: var(--text-secondary) !important;
+        }
+
+        .time-config {
+            font-size: 0.8rem;
+            font-weight: normal;
+            color: var(--text-muted);
+        }
+
+        .expired-time {
+            color: var(--danger-color) !important;
+        }
+
+        .timer-value {
+            font-family: var(--font-mono);
+            color: var(--text-primary);
+        }
+
+        .datetime-now {
+            font-family: var(--font-mono);
+            color: var(--text-secondary);
+        }
+
+        .page-title {
+            color: var(--text-primary);
+        }
+
+        .btn-outline-secondary {
+            color: var(--text-secondary);
+            border-color: var(--border-color);
+        }
+
+        .btn-outline-secondary:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .note-text {
+            color: var(--text-muted);
+        }
+
+        @keyframes blink {
+            25% { opacity: 1; }
+            50% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body class="themed">
+<div class="container">
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item"><a href="../index.html">ホーム</a></li>
+            <li class="breadcrumb-item active">カウントダウンタイマー</li>
+        </ol>
+    </nav>
+    <div class="row align-items-center mb-2">
+        <div class="col-auto">
+            <h4 class="mb-0 page-title">残された時間</h4>
+        </div>
+        <div class="col-auto">
+            <select class="form-select form-select-sm" id="groupSelect" style="min-width: 150px;"></select>
+        </div>
+        <div class="col-auto">
+            <select class="form-select form-select-sm" id="themeSelect" style="width: auto;"></select>
+        </div>
+        <div class="col">
+            <h4 class="text-end datetime-now mb-0" id="datetimenow"></h4>
+        </div>
+        <div class="col-auto">
+            <a href="settings.html" class="btn btn-outline-secondary" title="設定画面">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-gear" viewBox="0 0 16 16">
+                    <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"></path>
+                    <path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.377l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115l.094-.319z"></path>
+                </svg>
+            </a>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-12">
+            <div class="timer-container border rounded p-4 shadow" id="timers"></div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-12" style="margin-top:10px;">
+            <p class="note-text">※設定情報はlocalStorageに保存しています。ブラウザのデータを削除すると設定情報がリセットされます。</p>
+        </div>
+    </div>
+
+</div>
+
+
+
+<script>
+    // リダイレクトからの遷移を検知してアラート表示
+    (function() {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('from') === 'redirect') {
+            alert('このページのURLが変更されました。\n\n新しいURL: ' + window.location.origin + window.location.pathname + '\n\nブックマークを更新してください。');
+            // URLパラメータを削除
+            history.replaceState(null, '', window.location.pathname);
+        }
+    })();
+
+    $(document).ready(function () {
+        // デフォルトの設定データ（新構造）
+        const defaultSettings = {
+            active: 0,
+            groups: [
+                {
+                    name: "仕事用",
+                    timers: [
+                        {title: "起床時刻", targetTime: "07:00:00"},
+                        {title: "勤務開始時刻", targetTime: "09:00:00"},
+                        {title: "定時まで", targetTime: "18:00:00"},
+                        {title: "就寝時間まで", targetTime: "24:00:00"},
+                    ]
+                }
+            ]
+        };
+
+        // ストレージインスタンス
+        const settingsStorage = createStorage('timerList', defaultSettings);
+        let settings = null;
+        let timerList = [];
+
+        function calculateRemainingTime(targetTime) {
+            const now = new Date();
+            let target;
+
+            if (targetTime.includes("T")) {
+                // 特定日時: 2024-01-01T00:00:00
+                target = new Date(targetTime);
+            } else if (targetTime.startsWith("W")) {
+                // 毎週繰り返し: W135-09:00:00 (月水金の9時)
+                const match = targetTime.match(/W(\d+)-(\d{2}:\d{2}:\d{2})/);
+                if (match) {
+                    const days = match[1].split('').map(Number); // [1, 3, 5]
+                    const timeStr = match[2];
+                    target = findNextWeeklyTarget(now, days, timeStr);
+                } else {
+                    target = now;
+                }
+            } else if (targetTime.startsWith("D")) {
+                // 毎月繰り返し: D25-00:00:00 (毎月25日) or Dlast-00:00:00 (月末)
+                const match = targetTime.match(/D(\d+|last)-(\d{2}:\d{2}:\d{2})/);
+                if (match) {
+                    const daySpec = match[1];
+                    const timeStr = match[2];
+                    target = findNextMonthlyTarget(now, daySpec, timeStr);
+                } else {
+                    target = now;
+                }
+            } else {
+                // 毎日繰り返し: 09:00:00
+                target = new Date(now.toDateString() + " " + targetTime);
+                if (now > target) {
+                    target.setDate(target.getDate() + 1);
+                }
+            }
+            return Math.floor((target - now) / 1000);
+        }
+
+        function findNextWeeklyTarget(now, days, timeStr) {
+            // days: [0, 1, 3, 5] (日, 月, 水, 金) - JavaScriptの曜日形式
+            const todayDay = now.getDay();
+            const [hours, minutes, seconds] = timeStr.split(':').map(Number);
+
+            // 今日を含めて7日分チェック
+            for (let i = 0; i <= 7; i++) {
+                const checkDate = new Date(now);
+                checkDate.setDate(now.getDate() + i);
+                const checkDay = checkDate.getDay();
+
+                if (days.includes(checkDay)) {
+                    const target = new Date(checkDate);
+                    target.setHours(hours, minutes, seconds, 0);
+                    if (target > now) {
+                        return target;
+                    }
+                }
+            }
+            // フォールバック（来週の最初の該当日）
+            const target = new Date(now);
+            target.setDate(now.getDate() + 7);
+            target.setHours(hours, minutes, seconds, 0);
+            return target;
+        }
+
+        function findNextMonthlyTarget(now, daySpec, timeStr) {
+            const [hours, minutes, seconds] = timeStr.split(':').map(Number);
+
+            // 今月と来月をチェック
+            for (let monthOffset = 0; monthOffset <= 1; monthOffset++) {
+                const checkDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+                let targetDay;
+
+                if (daySpec === 'last') {
+                    // 月末
+                    targetDay = new Date(checkDate.getFullYear(), checkDate.getMonth() + 1, 0).getDate();
+                } else {
+                    targetDay = parseInt(daySpec);
+                    // 月の最終日を超えないようにする
+                    const lastDay = new Date(checkDate.getFullYear(), checkDate.getMonth() + 1, 0).getDate();
+                    targetDay = Math.min(targetDay, lastDay);
+                }
+
+                const target = new Date(checkDate.getFullYear(), checkDate.getMonth(), targetDay, hours, minutes, seconds);
+                if (target > now) {
+                    return target;
+                }
+            }
+            // フォールバック
+            const target = new Date(now);
+            target.setMonth(now.getMonth() + 2, 1);
+            return target;
+        }
+
+        function formatTime(seconds, isNegative = false, displayDays = true) {
+            const days = Math.floor(Math.abs(seconds) / 86400);
+            const hours = Math.floor((Math.abs(seconds % 86400) / 3600));
+            const minutes = Math.floor((Math.abs(seconds) % 3600) / 60);
+            const remainingSeconds = Math.abs(seconds) % 60;
+            const dayString = displayDays ? `${days}日` : "";
+            return `${isNegative ? '-' : ''}${dayString}${String(hours).padStart(2, '0')}時間${String(minutes).padStart(2, '0')}分${String(remainingSeconds).padStart(2, '0')}秒`;
+        }
+
+        function updateTextColor(element, remainingSeconds) {
+            // CSS変数を取得
+            const style = getComputedStyle(document.body);
+            const dangerColor = style.getPropertyValue('--danger-color').trim() || 'red';
+            const warningColor = style.getPropertyValue('--warning-color').trim() || 'orange';
+            const infoColor = style.getPropertyValue('--info-color').trim() || 'blue';
+
+            if (remainingSeconds < 15 * 60) {
+                element.css({"color": dangerColor, "animation": "blink 1s linear infinite"});
+            } else if (remainingSeconds < 30 * 60) {
+                element.css({"color": dangerColor, "animation": ""});
+            } else if (remainingSeconds < 60 * 60) {
+                element.css({"color": warningColor, "animation": ""});
+            } else {
+                element.css({"color": infoColor, "animation": ""});
+            }
+        }
+
+        function updateTimer() {
+            let allTimersFinished = true;
+
+            timerList.forEach(function (timer) {
+                const remainingSeconds = calculateRemainingTime(timer.targetTime);
+                // 特定日時、毎週、毎月は日数表示
+                const displayDays = timer.targetTime.includes("T") || timer.targetTime.startsWith("W") || timer.targetTime.startsWith("D");
+                const element = $("#" + CSS.escape(timer.title));
+                updateTextColor(element, remainingSeconds);
+
+                if (remainingSeconds > 0) {
+                    allTimersFinished = false;
+                    element.removeClass("expired-time").text(formatTime(remainingSeconds, false, displayDays));
+                } else {
+                    element.addClass("expired-time").text(formatTime(remainingSeconds, true, displayDays));
+                }
+            });
+
+            showTime();
+
+            if (!allTimersFinished) {
+                setTimeout(updateTimer, 1000);
+            }
+        }
+
+        function showTime() {
+            const date = new Date(); //現在時刻を取得
+            const y = date.getFullYear(), //西暦年
+                m = date.getMonth() + 1, //月
+                d = date.getDate(), //日
+                H = date.getHours(), //時
+                M = date.getMinutes(), //分
+                S = date.getSeconds(); //秒
+            const yStr = y.toString().padStart(4, '0'), //西暦年を4桁の文字列に変換
+                mStr = m.toString().padStart(2, '0'), //月を2桁の文字列に変換
+                dStr = d.toString().padStart(2, '0'), //日を2桁の文字列に変換
+                HStr = H.toString().padStart(2, '0'), //時を2桁の文字列に変換
+                MStr = M.toString().padStart(2, '0'), //分を2桁の文字列に変換
+                SStr = S.toString().padStart(2, '0'); //秒を2桁の文字列に変換
+            const timeString = `${yStr}/${mStr}/${dStr} ${HStr}:${MStr}:${SStr}`; //時計として表示する文字列を作成
+            $("#datetimenow").text(timeString);
+        }
+
+        function saveSettingsToCookie(data) {
+            settingsStorage.save(data);
+        }
+
+        function loadSettingsFromCookie() {
+            return settingsStorage.load();
+        }
+
+        // targetTimeのフォーマットを検証・修正
+        function validateTargetTime(targetTime) {
+            if (typeof targetTime !== 'string') return null;
+
+            // 特定日時 (2024-01-01T00:00:00)
+            if (targetTime.includes('T')) return targetTime;
+            // 毎週 (W135-09:00:00)
+            if (targetTime.startsWith('W')) return targetTime;
+            // 毎月 (D25-00:00:00)
+            if (targetTime.startsWith('D')) return targetTime;
+
+            // 毎日 (HH:MM:SS) - コロンが2つ以外は不正
+            const parts = targetTime.split(':');
+            if (parts.length === 3) {
+                return targetTime; // 正常
+            } else if (parts.length === 4) {
+                // "21:00:00:00" のような誤りを "21:00:00" に修正
+                return parts.slice(0, 3).join(':');
+            }
+            return null; // 不正な形式
+        }
+
+        // 旧形式（配列）から新形式への変換
+        function migrateOldFormat(data) {
+            if (Array.isArray(data)) {
+                // 旧形式: 配列の場合は新形式に変換
+                // 有効なタイマーのみをフィルタリング＆修正
+                const validTimers = data
+                    .filter(t => t && typeof t.title === 'string' && typeof t.targetTime === 'string')
+                    .map(t => ({
+                        title: t.title,
+                        targetTime: validateTargetTime(t.targetTime)
+                    }))
+                    .filter(t => t.targetTime !== null);
+
+                const migrated = {
+                    active: 0,
+                    groups: [
+                        { name: "Timer1", timers: validTimers }
+                    ]
+                };
+                // マイグレーション後は即座に保存して次回から新形式で読み込まれるようにする
+                saveSettingsToCookie(migrated);
+                console.log('Timer settings migrated from old format to new format', migrated);
+                return migrated;
+            }
+            // 新形式: そのまま返す
+            return data;
+        }
+
+        function renderGroupSelect() {
+            const $select = $('#groupSelect');
+            $select.empty();
+            settings.groups.forEach((group, index) => {
+                $select.append(`<option value="${index}">${group.name}</option>`);
+            });
+            $select.val(settings.active);
+        }
+
+        function renderTimers() {
+            const activeGroup = settings.groups[settings.active];
+            timerList = activeGroup ? activeGroup.timers : [];
+
+            $("#timers").empty();
+            timerList.forEach(function (timer) {
+                const escapedId = timer.title.replace(/[^a-zA-Z0-9_-]/g, '_');
+                $("#timers").append(`
+                <h2 class="fs-5 text-muted">${timer.title} <span class="time-config">${timer.targetTime}</span></h2>
+                <p class="fs-1 fw-bold timer-value" id="${timer.title}"></p>
+                <br/>
+              `);
+            });
+        }
+
+        function initializeTimers() {
+            const rawData = loadSettingsFromCookie();
+            settings = migrateOldFormat(rawData);
+
+            // activeが範囲外の場合は0にリセット
+            if (settings.active < 0 || settings.active >= settings.groups.length) {
+                settings.active = 0;
+            }
+
+            saveSettingsToCookie(settings);
+
+            renderGroupSelect();
+            renderTimers();
+        }
+
+        // グループ切り替え
+        $('#groupSelect').on('change', function() {
+            settings.active = parseInt($(this).val());
+            saveSettingsToCookie(settings);
+            renderTimers();
+            updateTimer();
+        });
+
+        initializeTimers();
+        updateTimer();
+    });
+
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.min.js"
+        crossorigin="anonymous"></script>
+<script src="../common/theme-switcher.js"></script>
+<script>
+    // テーマ切り替え初期化（デフォルト: White、独自ストレージキー）
+    ThemeSwitcher.init('themeSelect', {
+        defaultTheme: 'white',
+        storageKey: 'countdownTimerTheme'
+    });
+</script>
+</body>
+</html>

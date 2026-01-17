@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>タイマー設定</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet"
+          crossorigin="anonymous">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="../common/storage.js"></script>
+    <style>
+        body {
+            margin: 30px 10px;
+        }
+        .timer-item {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .timer-item:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .btn-delete {
+            opacity: 0.7;
+        }
+        .btn-delete:hover {
+            opacity: 1;
+        }
+        .preview-time {
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+        .drag-handle {
+            cursor: grab;
+            color: #adb5bd;
+        }
+        .drag-handle:hover {
+            color: #6c757d;
+        }
+        .timer-item.dragging {
+            opacity: 0.5;
+        }
+        .drop-zone {
+            border: 2px dashed #dee2e6;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            color: #6c757d;
+            transition: all 0.3s;
+        }
+        .drop-zone.dragover {
+            border-color: #0d6efd;
+            background-color: #e7f1ff;
+            color: #0d6efd;
+        }
+        .drop-zone-icon {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="row mb-4">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="../index.html">ホーム</a></li>
+                    <li class="breadcrumb-item"><a href="index.html">カウントダウンタイマー</a></li>
+                    <li class="breadcrumb-item active">設定</li>
+                </ol>
+            </nav>
+            <h2>タイマー設定</h2>
+            <p class="text-muted">カウントダウンタイマーの設定を管理します。設定はlocalStorageに保存されます。</p>
+        </div>
+    </div>
+
+    <!-- グループ選択 -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">グループ管理</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row align-items-end">
+                        <div class="col-md-4 mb-2 mb-md-0">
+                            <label for="groupSelect" class="form-label">現在のグループ</label>
+                            <select class="form-select" id="groupSelect"></select>
+                        </div>
+                        <div class="col-auto">
+                            <button type="button" class="btn btn-success" id="addGroupBtn" title="グループを追加">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-lg" viewBox="0 0 16 16">
+                                    <path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="col-auto">
+                            <button type="button" class="btn btn-outline-primary" id="renameGroupBtn" title="グループ名を変更">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-pencil" viewBox="0 0 16 16">
+                                    <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="col-auto">
+                            <button type="button" class="btn btn-outline-danger" id="deleteGroupBtn" title="グループを削除">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+                                    <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                                    <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- タイマー一覧 -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4>タイマー一覧 <small class="text-muted" id="currentGroupName"></small></h4>
+                <button type="button" class="btn btn-success" id="addTimerBtn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-lg" viewBox="0 0 16 16">
+                        <path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2"/>
+                    </svg>
+                    タイマーを追加
+                </button>
+            </div>
+            <div id="timerList"></div>
+            <div id="emptyMessage" class="text-center text-muted py-5" style="display: none;">
+                タイマーがありません。「タイマーを追加」ボタンで追加してください。
+            </div>
+        </div>
+    </div>
+
+    <!-- 操作ボタン -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-primary btn-lg" id="saveBtn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check-lg" viewBox="0 0 16 16">
+                        <path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425a.247.247 0 0 1 .02-.022"/>
+                    </svg>
+                    保存
+                </button>
+                <button type="button" class="btn btn-outline-secondary" id="resetBtn">
+                    デフォルトに戻す
+                </button>
+                <a href="index.html" class="btn btn-outline-primary">
+                    タイマー画面へ
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- エクスポート/インポート -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">設定のバックアップ</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3 mb-md-0">
+                            <h6>エクスポート</h6>
+                            <p class="text-muted small">現在の設定をJSONファイルとしてダウンロードします。</p>
+                            <button type="button" class="btn btn-outline-primary" id="exportBtn">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-download" viewBox="0 0 16 16">
+                                    <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"/>
+                                    <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z"/>
+                                </svg>
+                                設定をダウンロード
+                            </button>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>インポート</h6>
+                            <p class="text-muted small">JSONファイルをドラッグ&ドロップまたは選択して読み込みます。</p>
+                            <div class="drop-zone" id="dropZone">
+                                <div class="drop-zone-icon">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="currentColor" class="bi bi-upload" viewBox="0 0 16 16">
+                                        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"/>
+                                        <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708z"/>
+                                    </svg>
+                                </div>
+                                <div>ここにJSONファイルをドロップ</div>
+                                <div class="mt-2">または</div>
+                                <label class="btn btn-outline-secondary btn-sm mt-2">
+                                    ファイルを選択
+                                    <input type="file" id="fileInput" accept=".json" style="display: none;">
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JSON直接編集 -->
+    <div class="row">
+        <div class="col">
+            <div class="accordion" id="advancedAccordion">
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#jsonEditor">
+                            JSON直接編集（上級者向け）
+                        </button>
+                    </h2>
+                    <div id="jsonEditor" class="accordion-collapse collapse" data-bs-parent="#advancedAccordion">
+                        <div class="accordion-body">
+                            <textarea class="form-control font-monospace" id="jsonTextarea" rows="10"></textarea>
+                            <div class="mt-2 d-flex gap-2">
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="applyJsonBtn">JSONを適用</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshJsonBtn">JSONを更新</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- タイマー追加/編集モーダル -->
+<div class="modal fade" id="timerModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="timerModalTitle">タイマーを追加</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="timerTitle" class="form-label">タイトル <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="timerTitle" placeholder="例: 起床時刻" required>
+                    <div class="form-text">半角スペースは使用できません</div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">タイマー種別 <span class="text-danger">*</span></label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="timerType" id="typeDaily" value="daily" checked>
+                        <label class="form-check-label" for="typeDaily">
+                            毎日繰り返し（指定時刻まで）
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="timerType" id="typeOnce" value="once">
+                        <label class="form-check-label" for="typeOnce">
+                            特定日時（1回限り）
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="timerType" id="typeWeekly" value="weekly">
+                        <label class="form-check-label" for="typeWeekly">
+                            毎週繰り返し
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="timerType" id="typeMonthly" value="monthly">
+                        <label class="form-check-label" for="typeMonthly">
+                            毎月繰り返し
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 毎日繰り返し用 -->
+                <div id="dailySettings" class="timer-settings">
+                    <div class="mb-3">
+                        <label for="dailyTime" class="form-label">時刻</label>
+                        <input type="time" class="form-control" id="dailyTime" value="09:00" step="1">
+                    </div>
+                </div>
+
+                <!-- 特定日時用 -->
+                <div id="onceSettings" class="timer-settings" style="display: none;">
+                    <div class="mb-3">
+                        <label for="onceDate" class="form-label">日付</label>
+                        <input type="date" class="form-control" id="onceDate">
+                    </div>
+                    <div class="mb-3">
+                        <label for="onceTime" class="form-label">時刻</label>
+                        <input type="time" class="form-control" id="onceTime" value="00:00" step="1">
+                    </div>
+                </div>
+
+                <!-- 毎週繰り返し用 -->
+                <div id="weeklySettings" class="timer-settings" style="display: none;">
+                    <div class="mb-3">
+                        <label class="form-label">曜日</label>
+                        <div class="btn-group d-flex" role="group">
+                            <input type="checkbox" class="btn-check" id="weekday0" value="0">
+                            <label class="btn btn-outline-primary" for="weekday0">日</label>
+                            <input type="checkbox" class="btn-check" id="weekday1" value="1">
+                            <label class="btn btn-outline-primary" for="weekday1">月</label>
+                            <input type="checkbox" class="btn-check" id="weekday2" value="2">
+                            <label class="btn btn-outline-primary" for="weekday2">火</label>
+                            <input type="checkbox" class="btn-check" id="weekday3" value="3">
+                            <label class="btn btn-outline-primary" for="weekday3">水</label>
+                            <input type="checkbox" class="btn-check" id="weekday4" value="4">
+                            <label class="btn btn-outline-primary" for="weekday4">木</label>
+                            <input type="checkbox" class="btn-check" id="weekday5" value="5">
+                            <label class="btn btn-outline-primary" for="weekday5">金</label>
+                            <input type="checkbox" class="btn-check" id="weekday6" value="6">
+                            <label class="btn btn-outline-primary" for="weekday6">土</label>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="weeklyTime" class="form-label">時刻</label>
+                        <input type="time" class="form-control" id="weeklyTime" value="09:00" step="1">
+                    </div>
+                </div>
+
+                <!-- 毎月繰り返し用 -->
+                <div id="monthlySettings" class="timer-settings" style="display: none;">
+                    <div class="mb-3">
+                        <label for="monthlyDay" class="form-label">日</label>
+                        <select class="form-select" id="monthlyDay">
+                            <option value="1">1日</option>
+                            <option value="5">5日</option>
+                            <option value="10">10日</option>
+                            <option value="15">15日</option>
+                            <option value="20">20日</option>
+                            <option value="25">25日</option>
+                            <option value="last">月末</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="monthlyTime" class="form-label">時刻</label>
+                        <input type="time" class="form-control" id="monthlyTime" value="00:00" step="1">
+                    </div>
+                </div>
+
+                <!-- プレビュー -->
+                <div class="alert alert-info">
+                    <strong>設定値プレビュー:</strong>
+                    <code id="targetTimePreview">09:00:00</code>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-primary" id="saveTimerBtn">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Migration確認モーダル -->
+<div class="modal fade" id="migrationModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">設定データの移行</h5>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <strong>Cookieに保存された設定データが見つかりました。</strong><br>
+                    このデータをlocalStorageに移行しますか？
+                </div>
+                <p class="text-muted">移行するデータの内容:</p>
+                <textarea class="form-control" id="migrationPreview" rows="10" readonly></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-danger" id="discardMigrationBtn">破棄する</button>
+                <button type="button" class="btn btn-primary" id="executeMigrationBtn">移行する</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.min.js" crossorigin="anonymous"></script>
+<script>
+// リダイレクトからの遷移を検知してアラート表示
+(function() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('from') === 'redirect') {
+        alert('このページのURLが変更されました。\n\n新しいURL: ' + window.location.origin + window.location.pathname + '\n\nブックマークを更新してください。');
+        // URLパラメータを削除
+        history.replaceState(null, '', window.location.pathname);
+    }
+})();
+
+$(document).ready(function() {
+    // デフォルトの設定データ（新構造）
+    const defaultSettings = {
+        active: 0,
+        groups: [
+            {
+                name: "仕事用",
+                timers: [
+                    {title: "起床時刻", targetTime: "07:00:00"},
+                    {title: "勤務開始時刻", targetTime: "09:00:00"},
+                    {title: "定時まで", targetTime: "18:00:00"},
+                    {title: "就寝時間まで", targetTime: "24:00:00"},
+                ]
+            }
+        ]
+    };
+
+    // 共通ストレージライブラリを使用
+    const settingsStorage = createStorage('timerList', defaultSettings);
+
+    let settings = null;
+    let timerList = [];
+    let editingIndex = -1;
+    let timerModal, migrationModal;
+
+    // 初期化
+    function init() {
+        timerModal = new bootstrap.Modal(document.getElementById('timerModal'));
+        migrationModal = new bootstrap.Modal(document.getElementById('migrationModal'));
+
+        // Cookie移行確認
+        if (settingsStorage.hasCookieData()) {
+            const cookieData = settingsStorage.getCookieData();
+            $('#migrationPreview').val(JSON.stringify(cookieData, null, 2));
+            migrationModal.show();
+            setupEventListeners();
+            return;
+        }
+
+        loadAndRender();
+        setupEventListeners();
+    }
+
+    function loadAndRender() {
+        const rawData = settingsStorage.load();
+        settings = migrateOldFormat(rawData);
+
+        // activeが範囲外の場合は0にリセット
+        if (settings.active < 0 || settings.active >= settings.groups.length) {
+            settings.active = 0;
+        }
+
+        renderGroupSelect();
+        loadCurrentGroup();
+        renderTimerList();
+        updateJsonTextarea();
+    }
+
+    // targetTimeのフォーマットを検証・修正
+    function validateTargetTime(targetTime) {
+        if (typeof targetTime !== 'string') return null;
+
+        // 特定日時 (2024-01-01T00:00:00)
+        if (targetTime.includes('T')) return targetTime;
+        // 毎週 (W135-09:00:00)
+        if (targetTime.startsWith('W')) return targetTime;
+        // 毎月 (D25-00:00:00)
+        if (targetTime.startsWith('D')) return targetTime;
+
+        // 毎日 (HH:MM:SS) - コロンが2つ以外は不正
+        const parts = targetTime.split(':');
+        if (parts.length === 3) {
+            return targetTime; // 正常
+        } else if (parts.length === 4) {
+            // "21:00:00:00" のような誤りを "21:00:00" に修正
+            return parts.slice(0, 3).join(':');
+        }
+        return null; // 不正な形式
+    }
+
+    // 旧形式（配列）から新形式への変換
+    function migrateOldFormat(data) {
+        if (Array.isArray(data)) {
+            // 旧形式: 配列の場合は新形式に変換
+            // 有効なタイマーのみをフィルタリング＆修正
+            const validTimers = data
+                .filter(t => t && typeof t.title === 'string' && typeof t.targetTime === 'string')
+                .map(t => ({
+                    title: t.title,
+                    targetTime: validateTargetTime(t.targetTime)
+                }))
+                .filter(t => t.targetTime !== null);
+
+            const migrated = {
+                active: 0,
+                groups: [
+                    { name: "Timer1", timers: validTimers }
+                ]
+            };
+            // マイグレーション後は即座に保存して次回から新形式で読み込まれるようにする
+            saveSettingsToCookie(migrated);
+            console.log('Timer settings migrated from old format to new format', migrated);
+            return migrated;
+        }
+        // 新形式: そのまま返す
+        return data;
+    }
+
+    // ストレージ操作（共通ライブラリを使用）
+    function saveSettingsToCookie(data) {
+        settingsStorage.save(data);
+    }
+
+    function loadSettingsFromCookie() {
+        return settingsStorage.load();
+    }
+
+    // グループ関連
+    function renderGroupSelect() {
+        const $select = $('#groupSelect');
+        $select.empty();
+        settings.groups.forEach((group, index) => {
+            $select.append(`<option value="${index}">${escapeHtml(group.name)}</option>`);
+        });
+        $select.val(settings.active);
+    }
+
+    function loadCurrentGroup() {
+        const activeGroup = settings.groups[settings.active];
+        timerList = activeGroup ? activeGroup.timers : [];
+        $('#currentGroupName').text(`- ${activeGroup ? activeGroup.name : ''}`);
+    }
+
+    function saveCurrentGroup() {
+        if (settings.groups[settings.active]) {
+            settings.groups[settings.active].timers = timerList;
+        }
+    }
+
+    // タイマーリスト描画
+    function renderTimerList() {
+        const $list = $('#timerList');
+        $list.empty();
+
+        if (timerList.length === 0) {
+            $('#emptyMessage').show();
+            return;
+        }
+        $('#emptyMessage').hide();
+
+        timerList.forEach((timer, index) => {
+            const typeLabel = getTimerTypeLabel(timer.targetTime);
+            const $item = $(`
+                <div class="timer-item" data-index="${index}" draggable="true">
+                    <div class="row align-items-center">
+                        <div class="col-auto drag-handle">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M7 2a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0M7 5a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0M7 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0m-3 3a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0m-3 3a1 1 0 1 1-2 0 1 1 0 0 1 2 0m3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0"/>
+                            </svg>
+                        </div>
+                        <div class="col">
+                            <strong>${escapeHtml(timer.title)}</strong>
+                            <span class="badge bg-secondary ms-2">${typeLabel}</span>
+                            <div class="preview-time">${escapeHtml(timer.targetTime)}</div>
+                        </div>
+                        <div class="col-auto">
+                            <button type="button" class="btn btn-sm btn-outline-primary edit-btn" data-index="${index}">
+                                編集
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger btn-delete delete-btn" data-index="${index}">
+                                削除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `);
+            $list.append($item);
+        });
+
+        setupDragAndDrop();
+    }
+
+    function getTimerTypeLabel(targetTime) {
+        if (targetTime.includes('T')) {
+            return '特定日時';
+        } else if (targetTime.includes('W')) {
+            return '毎週';
+        } else if (targetTime.includes('D')) {
+            return '毎月';
+        } else {
+            return '毎日';
+        }
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // ドラッグ&ドロップ
+    function setupDragAndDrop() {
+        const items = document.querySelectorAll('.timer-item');
+        items.forEach(item => {
+            item.addEventListener('dragstart', handleDragStart);
+            item.addEventListener('dragend', handleDragEnd);
+            item.addEventListener('dragover', handleDragOver);
+            item.addEventListener('drop', handleDrop);
+        });
+    }
+
+    let draggedIndex = null;
+
+    function handleDragStart(e) {
+        draggedIndex = parseInt(this.dataset.index);
+        this.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+    }
+
+    function handleDragEnd(e) {
+        this.classList.remove('dragging');
+        draggedIndex = null;
+    }
+
+    function handleDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+    }
+
+    function handleDrop(e) {
+        e.preventDefault();
+        const targetIndex = parseInt(this.dataset.index);
+        if (draggedIndex !== null && draggedIndex !== targetIndex) {
+            const [removed] = timerList.splice(draggedIndex, 1);
+            timerList.splice(targetIndex, 0, removed);
+            renderTimerList();
+            updateJsonTextarea();
+        }
+    }
+
+    // イベントリスナー設定
+    function setupEventListeners() {
+        // グループ切り替え
+        $('#groupSelect').on('change', function() {
+            saveCurrentGroup(); // 現在のグループを保存
+            settings.active = parseInt($(this).val());
+            loadCurrentGroup();
+            renderTimerList();
+            updateJsonTextarea();
+        });
+
+        // グループ追加
+        $('#addGroupBtn').on('click', function() {
+            const name = prompt('新しいグループ名を入力してください:');
+            if (name && name.trim()) {
+                saveCurrentGroup();
+                settings.groups.push({ name: name.trim(), timers: [] });
+                settings.active = settings.groups.length - 1;
+                renderGroupSelect();
+                loadCurrentGroup();
+                renderTimerList();
+                updateJsonTextarea();
+            }
+        });
+
+        // グループ名変更
+        $('#renameGroupBtn').on('click', function() {
+            const currentName = settings.groups[settings.active].name;
+            const newName = prompt('新しいグループ名を入力してください:', currentName);
+            if (newName && newName.trim()) {
+                settings.groups[settings.active].name = newName.trim();
+                renderGroupSelect();
+                loadCurrentGroup();
+            }
+        });
+
+        // グループ削除
+        $('#deleteGroupBtn').on('click', function() {
+            if (settings.groups.length <= 1) {
+                alert('最後のグループは削除できません');
+                return;
+            }
+            const groupName = settings.groups[settings.active].name;
+            if (confirm(`グループ「${groupName}」を削除しますか？\nこの操作は取り消せません。`)) {
+                settings.groups.splice(settings.active, 1);
+                settings.active = Math.min(settings.active, settings.groups.length - 1);
+                renderGroupSelect();
+                loadCurrentGroup();
+                renderTimerList();
+                updateJsonTextarea();
+            }
+        });
+
+        // タイマー追加
+        $('#addTimerBtn').on('click', function() {
+            editingIndex = -1;
+            resetModal();
+            $('#timerModalTitle').text('タイマーを追加');
+            timerModal.show();
+        });
+
+        // タイマー編集
+        $(document).on('click', '.edit-btn', function() {
+            editingIndex = parseInt($(this).data('index'));
+            const timer = timerList[editingIndex];
+            loadTimerToModal(timer);
+            $('#timerModalTitle').text('タイマーを編集');
+            timerModal.show();
+        });
+
+        // タイマー削除
+        $(document).on('click', '.delete-btn', function() {
+            const index = parseInt($(this).data('index'));
+            if (confirm('このタイマーを削除しますか？')) {
+                timerList.splice(index, 1);
+                renderTimerList();
+                updateJsonTextarea();
+            }
+        });
+
+        // タイマー種別切替
+        $('input[name="timerType"]').on('change', function() {
+            showTimerSettings($(this).val());
+            updatePreview();
+        });
+
+        // 時刻変更時のプレビュー更新
+        $('#dailyTime, #onceDate, #onceTime, #weeklyTime, #monthlyDay, #monthlyTime').on('change', updatePreview);
+        $('[id^="weekday"]').on('change', updatePreview);
+
+        // タイマー保存
+        $('#saveTimerBtn').on('click', saveTimer);
+
+        // 全体保存
+        $('#saveBtn').on('click', function() {
+            saveCurrentGroup();
+            saveSettingsToCookie(settings);
+            alert('設定を保存しました！');
+        });
+
+        // デフォルトに戻す
+        $('#resetBtn').on('click', function() {
+            if (confirm('全てのグループをデフォルトに戻しますか？')) {
+                settings = JSON.parse(JSON.stringify(defaultSettings));
+                renderGroupSelect();
+                loadCurrentGroup();
+                renderTimerList();
+                updateJsonTextarea();
+            }
+        });
+
+        // JSON適用
+        $('#applyJsonBtn').on('click', function() {
+            try {
+                const parsed = JSON.parse($('#jsonTextarea').val());
+                // 新形式か旧形式かを判定
+                if (parsed.groups && Array.isArray(parsed.groups)) {
+                    settings = parsed;
+                    if (settings.active < 0 || settings.active >= settings.groups.length) {
+                        settings.active = 0;
+                    }
+                    renderGroupSelect();
+                    loadCurrentGroup();
+                } else if (Array.isArray(parsed)) {
+                    timerList = parsed;
+                }
+                renderTimerList();
+                alert('JSONを適用しました');
+            } catch (e) {
+                alert('JSONの解析に失敗しました: ' + e.message);
+            }
+        });
+
+        // JSON更新
+        $('#refreshJsonBtn').on('click', function() {
+            saveCurrentGroup();
+            updateJsonTextarea();
+        });
+
+        // エクスポート
+        $('#exportBtn').on('click', exportSettings);
+
+        // インポート（ファイル選択）
+        $('#fileInput').on('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                importFromFile(file);
+            }
+        });
+
+        // ドラッグ&ドロップ
+        const dropZone = document.getElementById('dropZone');
+
+        dropZone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.classList.remove('dragover');
+
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                importFromFile(files[0]);
+            }
+        });
+
+        // Migration実行
+        $('#executeMigrationBtn').on('click', function() {
+            settingsStorage.migrateCookie();
+            loadAndRender();
+            migrationModal.hide();
+        });
+
+        // Migration破棄
+        $('#discardMigrationBtn').on('click', function() {
+            if (confirm('Cookieのデータを破棄してデフォルト設定を使用します。よろしいですか？')) {
+                settingsStorage.discardCookie();
+                loadAndRender();
+                migrationModal.hide();
+            }
+        });
+    }
+
+    // エクスポート機能
+    function exportSettings() {
+        saveCurrentGroup();
+        const dataStr = JSON.stringify(settings, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+
+        const now = new Date();
+        const dateStr = now.toISOString().slice(0, 10);
+        const filename = `timer-settings-${dateStr}.json`;
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    // インポート機能
+    function importFromFile(file) {
+        if (!file.name.endsWith('.json')) {
+            alert('JSONファイルを選択してください');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const imported = JSON.parse(e.target.result);
+
+                // 新形式か旧形式かを判定してバリデーション
+                if (imported.groups && Array.isArray(imported.groups)) {
+                    // 新形式
+                    imported.groups.forEach((group, gi) => {
+                        if (!group.name) {
+                            throw new Error(`グループ${gi + 1}にnameがありません`);
+                        }
+                        if (!Array.isArray(group.timers)) {
+                            throw new Error(`グループ「${group.name}」のtimersが配列ではありません`);
+                        }
+                        group.timers.forEach((item, index) => {
+                            if (!item.title || !item.targetTime) {
+                                throw new Error(`グループ「${group.name}」の項目${index + 1}に title または targetTime がありません`);
+                            }
+                        });
+                    });
+
+                    const totalTimers = imported.groups.reduce((sum, g) => sum + g.timers.length, 0);
+                    if (confirm(`${imported.groups.length}グループ、合計${totalTimers}件のタイマーをインポートします。現在の設定は上書きされます。よろしいですか？`)) {
+                        settings = imported;
+                        if (settings.active < 0 || settings.active >= settings.groups.length) {
+                            settings.active = 0;
+                        }
+                        renderGroupSelect();
+                        loadCurrentGroup();
+                        renderTimerList();
+                        updateJsonTextarea();
+                        alert('インポートが完了しました！\n「保存」ボタンを押すとlocalStorageに保存されます。');
+                    }
+                } else if (Array.isArray(imported)) {
+                    // 旧形式 - validateTargetTimeで修正も行う
+                    const validTimers = imported
+                        .filter(item => item && typeof item.title === 'string' && typeof item.targetTime === 'string')
+                        .map(item => ({
+                            title: item.title,
+                            targetTime: validateTargetTime(item.targetTime)
+                        }))
+                        .filter(item => item.targetTime !== null);
+
+                    if (validTimers.length === 0) {
+                        throw new Error('有効なタイマーがありません');
+                    }
+
+                    if (confirm(`${validTimers.length}件のタイマーを現在のグループにインポートします。現在のグループのタイマーは上書きされます。よろしいですか？`)) {
+                        timerList = validTimers;
+                        renderTimerList();
+                        updateJsonTextarea();
+                        alert('インポートが完了しました！\n「保存」ボタンを押すとlocalStorageに保存されます。');
+                    }
+                } else {
+                    throw new Error('不正なファイル形式です');
+                }
+            } catch (err) {
+                alert('ファイルの読み込みに失敗しました: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    function showTimerSettings(type) {
+        $('.timer-settings').hide();
+        $(`#${type}Settings`).show();
+    }
+
+    function resetModal() {
+        $('#timerTitle').val('');
+        $('#typeDaily').prop('checked', true);
+        showTimerSettings('daily');
+        $('#dailyTime').val('09:00');
+        $('#onceDate').val(getTodayString());
+        $('#onceTime').val('00:00');
+        $('[id^="weekday"]').prop('checked', false);
+        $('#weeklyTime').val('09:00');
+        $('#monthlyDay').val('1');
+        $('#monthlyTime').val('00:00');
+        updatePreview();
+    }
+
+    function getTodayString() {
+        const today = new Date();
+        return today.toISOString().split('T')[0];
+    }
+
+    function loadTimerToModal(timer) {
+        $('#timerTitle').val(timer.title);
+
+        const targetTime = timer.targetTime;
+
+        if (targetTime.includes('T')) {
+            // 特定日時
+            $('#typeOnce').prop('checked', true);
+            showTimerSettings('once');
+            const [date, time] = targetTime.split('T');
+            $('#onceDate').val(date);
+            $('#onceTime').val(time.substring(0, 5));
+        } else if (targetTime.startsWith('W')) {
+            // 毎週
+            $('#typeWeekly').prop('checked', true);
+            showTimerSettings('weekly');
+            const match = targetTime.match(/W(\d+)-(\d{2}:\d{2}:\d{2})/);
+            if (match) {
+                const days = match[1].split('');
+                days.forEach(d => $(`#weekday${d}`).prop('checked', true));
+                $('#weeklyTime').val(match[2].substring(0, 5));
+            }
+        } else if (targetTime.startsWith('D')) {
+            // 毎月
+            $('#typeMonthly').prop('checked', true);
+            showTimerSettings('monthly');
+            const match = targetTime.match(/D(\d+|last)-(\d{2}:\d{2}:\d{2})/);
+            if (match) {
+                $('#monthlyDay').val(match[1]);
+                $('#monthlyTime').val(match[2].substring(0, 5));
+            }
+        } else {
+            // 毎日
+            $('#typeDaily').prop('checked', true);
+            showTimerSettings('daily');
+            $('#dailyTime').val(targetTime.substring(0, 5));
+        }
+
+        updatePreview();
+    }
+
+    // 時刻を HH:MM:SS 形式に正規化
+    function normalizeTime(timeVal, defaultVal = '09:00') {
+        if (!timeVal) timeVal = defaultVal;
+        const parts = timeVal.split(':');
+        if (parts.length === 2) {
+            // HH:MM -> HH:MM:00
+            return timeVal + ':00';
+        } else if (parts.length === 3) {
+            // HH:MM:SS そのまま
+            return timeVal;
+        }
+        return defaultVal + ':00';
+    }
+
+    function updatePreview() {
+        const type = $('input[name="timerType"]:checked').val();
+        let targetTime = '';
+
+        switch (type) {
+            case 'daily':
+                targetTime = normalizeTime($('#dailyTime').val(), '09:00');
+                break;
+            case 'once':
+                const date = $('#onceDate').val() || getTodayString();
+                const time = normalizeTime($('#onceTime').val(), '00:00');
+                targetTime = `${date}T${time}`;
+                break;
+            case 'weekly':
+                const days = [];
+                $('[id^="weekday"]:checked').each(function() {
+                    days.push($(this).val());
+                });
+                const weeklyTime = normalizeTime($('#weeklyTime').val(), '09:00');
+                targetTime = `W${days.join('')}-${weeklyTime}`;
+                break;
+            case 'monthly':
+                const day = $('#monthlyDay').val() || '1';
+                const monthlyTime = normalizeTime($('#monthlyTime').val(), '00:00');
+                targetTime = `D${day}-${monthlyTime}`;
+                break;
+        }
+
+        $('#targetTimePreview').text(targetTime);
+    }
+
+    function saveTimer() {
+        const title = $('#timerTitle').val().trim();
+
+        if (!title) {
+            alert('タイトルを入力してください');
+            return;
+        }
+
+        if (title.includes(' ')) {
+            alert('タイトルに半角スペースは使用できません');
+            return;
+        }
+
+        const targetTime = $('#targetTimePreview').text();
+
+        const timer = { title, targetTime };
+
+        if (editingIndex >= 0) {
+            timerList[editingIndex] = timer;
+        } else {
+            timerList.push(timer);
+        }
+
+        renderTimerList();
+        updateJsonTextarea();
+        timerModal.hide();
+    }
+
+    function updateJsonTextarea() {
+        saveCurrentGroup();
+        $('#jsonTextarea').val(JSON.stringify(settings, null, 2));
+    }
+
+    // 初期化実行
+    init();
+});
+</script>
+</body>
+</html>
