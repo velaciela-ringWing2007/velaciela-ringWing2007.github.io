@@ -1,0 +1,17 @@
+{
+  "name": "カウントダウンタイマー",
+  "short_name": "タイマー",
+  "description": "起床・勤務・就寝などの残り時間を表示するカウントダウンタイマー",
+  "start_url": "/countdown-timer/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0d6efd",
+  "icons": [
+    {
+      "src": "../icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

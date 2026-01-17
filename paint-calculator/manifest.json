@@ -1,0 +1,17 @@
+{
+  "name": "塗料計算",
+  "short_name": "塗料",
+  "description": "塗料硬化剤・希釈液計算ツール",
+  "start_url": "/paint-calculator/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0d6efd",
+  "icons": [
+    {
+      "src": "../icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
