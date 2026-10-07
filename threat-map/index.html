@@ -29,7 +29,8 @@
   body{margin:0;background:radial-gradient(130% 90% at 50% -10%, var(--bg-g1) 0%, var(--bg) 58%, var(--bg-g2) 100%);
     color:var(--fg);font-family:"Share Tech Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
     -webkit-font-smoothing:antialiased;overflow-x:hidden;transition:background .4s;}
-  .wrap{min-height:100%;display:flex;flex-direction:column;gap:12px;padding-inline:16px;padding-block:14px;max-width:1280px;margin-inline:auto;}
+  .wrap{min-height:100%;display:flex;flex-direction:column;gap:12px;padding-inline:16px;padding-block:14px;margin-inline:auto;
+    max-width:max(1280px, calc((100vh - 120px) * 20 / 11 + 340px));} /* 地図(20:11)の高さが画面に収まる幅まで拡大 */
   header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
     border:1px solid var(--panel-brd);background:var(--panel);border-radius:10px;padding:10px 16px;backdrop-filter:blur(2px);}
   .brand{display:flex;flex-direction:column;gap:1px;min-width:0}
@@ -43,7 +44,9 @@
   .status .lbl{color:var(--fg-dim);letter-spacing:.14em}
   .console{display:flex;gap:12px;align-items:stretch}
   @media(max-width:820px){.console{flex-direction:column}}
-  .mapwrap{position:relative;flex:1 1 440px;min-width:0;border:1px solid var(--panel-brd);border-radius:10px;overflow:hidden;
+  .mapcell{flex:1 1 440px;min-width:0;display:flex;align-items:flex-start;justify-content:center}
+  @media(min-width:821px){.mapcell{min-width:480px}}
+  .mapwrap{position:relative;width:100%;border:1px solid var(--panel-brd);border-radius:10px;overflow:hidden;
     background:linear-gradient(180deg,#060b15,#04060d);aspect-ratio:20/11;}
   :root[data-mode="max"] .mapwrap{background:linear-gradient(180deg,#150608,#0a0306)}
   canvas{display:block;width:100%;height:100%}
@@ -127,7 +130,14 @@
   .dockhead,.docktog{display:none}
   :root[data-view="1"] .wrap{max-width:none;height:100vh;height:100dvh;overflow:hidden}
   :root[data-view="1"] .console{flex:1 1 auto;min-height:0}
-  :root[data-view="1"] .mapwrap{aspect-ratio:auto}
+  :root[data-view="1"] .mapcell{container-type:size;align-items:center;min-height:0}
+  :root[data-view="1"] .mapwrap{width:min(100cqw, 100cqh * 20 / 11)}
+  @media(orientation:portrait) and (min-width:821px){
+    :root[data-view="1"] .console{flex-direction:column}
+    :root[data-view="1"] .mapcell{container-type:normal;flex:0 0 auto}
+    :root[data-view="1"] .mapwrap{width:100%}
+    :root[data-view="1"] .side{flex:1 1 auto;min-height:0}
+  }
   :root[data-view="1"] .side{flex-basis:320px}
   :root[data-view="1"] .side .panel:last-child{flex:1;min-height:0;display:flex;flex-direction:column}
   :root[data-view="1"] .feed{flex:1;height:auto}
@@ -139,7 +149,8 @@
   :root[data-view="1"] .docktog{display:block;position:fixed;right:24px;bottom:18px;z-index:19;background:var(--panel);backdrop-filter:blur(4px)}
   @media(max-width:820px){
     :root[data-view="1"] .wrap{height:auto;overflow:visible}
-    :root[data-view="1"] .mapwrap{aspect-ratio:20/11}
+    :root[data-view="1"] .mapcell{container-type:normal;flex:0 0 auto}
+    :root[data-view="1"] .mapwrap{width:100%}
     :root[data-view="1"] .dock{left:8px;right:8px}
   }
   @media(prefers-reduced-motion:reduce){.feed .l{animation:none;opacity:1}.live .dot{animation:none}body{transition:none}:root[data-view="1"] .dock{transition:none}}
@@ -158,11 +169,11 @@
     </div>
   </header>
   <div class="console">
-    <div class="mapwrap">
+    <div class="mapcell"><div class="mapwrap">
       <canvas id="map"></canvas>
       <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
       <span class="maptag">AMOUNT OF CYBER ATTACKS &nbsp;/&nbsp; FROM ALL &nbsp;&rarr;&nbsp; <b id="tgttag">TO JAPAN</b></span>
-    </div>
+    </div></div>
     <div class="side">
       <div class="panel"><h2>Attacks Today <small id="rate">+0 /s</small></h2>
         <div class="total" id="total">0</div><div class="total-sub" id="daylbl">TODAY &middot; 日替わりリセット</div></div>
@@ -256,7 +267,8 @@ function buildBase(){
   for(let i=0;i<LAND.length;i++){ const p=proj(LAND[i][1],LAND[i][0]); bctx.fillRect(p[0]-0.6,p[1]-0.6,1.35,1.35); }
 }
 function resize(){ const r=cv.getBoundingClientRect(); DPR=Math.min(devicePixelRatio||1,2);
-  W=r.width; H=r.height; cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR); ctx.setTransform(DPR,0,0,DPR,0,0); buildBase(); }
+  W=r.width; H=r.height; cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR); ctx.setTransform(DPR,0,0,DPR,0,0); buildBase();
+  arcs.forEach(arcGeom); ripples.length=0; } // 飛行中の弧も新しいサイズに追従
 new ResizeObserver(resize).observe(cv);
 
 /* 送信元都市 */
@@ -308,11 +320,13 @@ let total=0; const counts=new Map(); const arcs=[]; const ripples=[]; const flar
 // hqAttackers: HQを攻撃した送信元 → {t,lat,lng} / locks: コマンド攻撃の着弾マーカー
 let paused=false, speed=1, spawnAcc=0; let rateWin=[], rateShown=0;
 
-function makeArc(o){ // o:{fromLat,fromLng,toLat,toLng,kind,proto,ip,cc,fromName,toName}
-  const [sx,sy]=proj(o.fromLat,o.fromLng), [tx,ty]=proj(o.toLat,o.toLng);
+function arcGeom(a){ // 緯度経度 → 画面上の始点・制御点・終点
+  const [sx,sy]=proj(a.fromLat,a.fromLng), [tx,ty]=proj(a.toLat,a.toLng);
   const mx=(sx+tx)/2,my=(sy+ty)/2, dx=tx-sx,dy=ty-sy, d=Math.hypot(dx,dy)||1;
-  const lift=Math.min(d*0.32,H*0.42), cx=mx-dy/d*lift, cy=my-dx/d*lift-d*0.04;
-  arcs.push(Object.assign({sx,sy,cx,cy,tx,ty,t:0,speed:0.55+Math.random()*0.35,done:false},o));
+  const lift=Math.min(d*0.32,H*0.42);
+  return Object.assign(a,{sx,sy,cx:mx-dy/d*lift,cy:my-dx/d*lift-d*0.04,tx,ty}); }
+function makeArc(o){ // o:{fromLat,fromLng,toLat,toLng,kind,proto,ip,cc,fromName,toName}
+  arcs.push(arcGeom(Object.assign({t:0,speed:0.55+Math.random()*0.35,done:false},o)));
 }
 function emit(ev){
   const T=destTarget();
