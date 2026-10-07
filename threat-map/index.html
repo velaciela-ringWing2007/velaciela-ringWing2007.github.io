@@ -568,12 +568,12 @@ function updOps(){ document.getElementById('opsname').innerHTML=outTargets.size?
 function toggleOut(i){ if(i===home) return false; outTargets.has(i)?outTargets.delete(i):outTargets.add(i); syncChips(); updOps(); savecfg(); return true; }
 function toggleTarget(i){ // 最後の1つは外せない
   if(active.has(i)){ if(active.size<=1) return false; active.delete(i); } else active.add(i);
-  syncChips(); recenter(); arcs.length=0; ripples.length=0; applyLabels(); updHQ(); buildBase(); savecfg(); return true; }
+  syncChips(); applyLabels(); updHQ(); savecfg(); return true; } // 飛行中の線はそのまま、次の攻撃から新しい標的へ
 chipsEl.addEventListener('change',e=>{ const i=+e.target.dataset.i; if(!(tgtMode==='out'?toggleOut(i):toggleTarget(i))) e.target.checked=!e.target.checked; });
 
 const hqsel=document.getElementById('hqsel');
 hqsel.innerHTML=REGIONS.map(r=>`<optgroup label="${r}">`+TARGETS.map((t,i)=>[t,i]).filter(([t])=>t.region===r).map(([t,i])=>`<option value="${i}">${t.name}</option>`).join('')+'</optgroup>').join('');
-function setHome(i){ home=i; hqsel.value=String(i); hqAttackers.clear(); outTargets.delete(i); syncChips(); updOps(); ZOOM=1; FX=FY=.5; updZoomUI(); updHQ(); recenter(); arcs.length=0; ripples.length=0; buildBase(); savecfg(); }
+function setHome(i){ home=i; hqsel.value=String(i); hqAttackers.clear(); outTargets.delete(i); syncChips(); updOps(); ZOOM=1; FX=FY=.5; updZoomUI(); updHQ(); recenter(); buildBase(); arcs.forEach(arcGeom); ripples.length=0; savecfg(); }
 hqsel.addEventListener('change',()=>setHome(+hqsel.value));
 
 const modeBtn=document.getElementById('mode');
@@ -581,7 +581,7 @@ function applyMode(){ document.documentElement.setAttribute('data-mode',mode); c
   modeBtn.textContent = mode==='max' ? 'MODE: 攻殻MAX' : 'MODE: 標準'; modeBtn.classList.toggle('on',mode==='max'); buildBase(); }
 
 const randBtn=document.getElementById('random'), retalBtn=document.getElementById('retal');
-function applyRandom(){ randBtn.classList.toggle('on',randomMode); syncChips(); recenter(); arcs.length=0; ripples.length=0; applyLabels(); updHQ(); buildBase(); }
+function applyRandom(){ randBtn.classList.toggle('on',randomMode); syncChips(); applyLabels(); updHQ(); }
 function applyRetal(){ retalBtn.classList.toggle('on',retaliate); }
 const recentSel=document.getElementById('recent');
 recentSel.innerHTML=RECENT_OPTS.map(s=>`<option value="${s}">直近${secLabel(s)}</option>`).join('');
