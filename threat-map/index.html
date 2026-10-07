@@ -14,7 +14,7 @@
     --panel:rgba(10,16,26,.72);--panel-brd:rgba(90,150,190,.16);
     --grid:rgba(90,170,210,.10);--grid2:rgba(90,170,210,.22);--land:rgba(90,175,215,.32);
     --fg:#cfeaf5;--fg-dim:#6f90a2;
-    --cyan:#35e0ff;--target:#ff5a4d;--good:#5ef0a8;--warn:#ffb454;--ops:#d4ff3a;--glow:rgba(53,224,255,.35);
+    --cyan:#35e0ff;--target:#ff5a4d;--good:#5ef0a8;--warn:#ffb454;--ops:#d4ff3a;--site:#eaf4ff;--glow:rgba(53,224,255,.35);
     color-scheme:dark;
   }
   :root[data-mode="max"]{
@@ -22,7 +22,7 @@
     --panel:rgba(26,10,12,.72);--panel-brd:rgba(190,100,100,.20);
     --grid:rgba(215,95,95,.10);--grid2:rgba(215,95,95,.24);--land:rgba(210,105,105,.30);
     --fg:#f5dada;--fg-dim:#b07c7c;
-    --cyan:#ff5a4d;--target:#ffcf3a;--good:#5effb0;--warn:#ffb454;--ops:#3affea;--glow:rgba(255,90,77,.4);
+    --cyan:#ff5a4d;--target:#ffcf3a;--good:#5effb0;--warn:#ffb454;--ops:#3affea;--site:#ffe6dc;--glow:rgba(255,90,77,.4);
   }
   *{box-sizing:border-box}
   html,body{height:100%}
@@ -423,10 +423,15 @@ function drawRank(){
 /* ════ 描画 ════ */
 const bez=(p,a,c,b)=>{const q=1-p;return [q*q*a[0]+2*q*p*c[0]+p*p*b[0], q*q*a[1]+2*q*p*c[1]+p*p*b[1]];};
 const hex2rgb=h=>{h=(h||'#35e0ff').replace('#','');return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];};
-function drawCities(now){
-  for(const c of CITIES){ const [x,y]=proj(c[2],c[3]); const hot=(flares.get(c[0])||0)>now;
-    ctx.beginPath();ctx.arc(x,y,hot?2.4:1.3,0,7); ctx.fillStyle=hot?'#fff':'rgba(150,175,195,.5)';
-    if(hot){ctx.shadowBlur=10;ctx.shadowColor='#cfe8ff';} ctx.fill();ctx.shadowBlur=0; }
+function drawCities(now){ // 拠点：大陸ドット（塗りの四角）と区別できるよう「リング＋中心点」で描く
+  const [r,g,b]=hex2rgb(getCss('--site')), label=ZOOM>=2;
+  ctx.font='9px "Share Tech Mono",monospace'; ctx.textAlign='left'; ctx.lineWidth=1;
+  for(const p of PLACES){ const [x,y]=proj(p.lat,p.lng); if(x<-30||x>W+30||y<-30||y>H+30) continue;
+    const hot=(flares.get(p.name)||0)>now, hov=p===hoverPlace;
+    if(hot){ ctx.beginPath();ctx.arc(x,y,3,0,7);ctx.fillStyle='#fff';ctx.shadowBlur=12;ctx.shadowColor='#cfe8ff';ctx.fill();ctx.shadowBlur=0; }
+    else { ctx.beginPath();ctx.arc(x,y,hov?4.2:2.8,0,7);ctx.strokeStyle=`rgba(${r},${g},${b},${hov?1:.75})`;ctx.stroke();
+      ctx.beginPath();ctx.arc(x,y,1,0,7);ctx.fillStyle=`rgba(${r},${g},${b},.95)`;ctx.fill(); }
+    if(label||hov){ ctx.fillStyle=`rgba(${r},${g},${b},${hov?1:.6})`; ctx.fillText(p.name,x+6,y-5); } }
 }
 function drawTargets(now){
   const t=(now/1000)%2/2, [r,g,b]=hex2rgb(getCss('--target'));
@@ -785,7 +790,7 @@ function choose(c,label){ asay(label,'me'); const r=c.run();
 /* ════ 地図操作：ホイールで拡大縮小 / ドラッグで移動 / 拠点クリックでポップアップ ════ */
 const mapwrap=cv.parentElement, zoomBtn=document.getElementById('zoomui');
 const pop=document.createElement('div'); pop.className='mpop'; pop.hidden=true; mapwrap.appendChild(pop);
-const TNAMES=new Set(TARGETS.map(t=>t.name));
+const TNAMES=new Set(TARGETS.map(t=>t.name)); let hoverPlace=null; // マウスが乗っている拠点（名前を表示）
 const PLACES=[...TARGETS.map((t,i)=>({name:t.name,lat:t.lat,lng:t.lng,ti:i,cc:(CITIES.find(c=>c[0]===t.name)||[])[1]})),
   ...CITIES.filter(c=>!TNAMES.has(c[0])).map(c=>({name:c[0],lat:c[2],lng:c[3],cc:c[1]}))];
 function evPos(e){ const r=cv.getBoundingClientRect(); return [e.clientX-r.left,e.clientY-r.top]; }
@@ -805,7 +810,7 @@ cv.addEventListener('pointerdown',e=>{ if(e.button!==0) return; drag={x:e.client
 window.addEventListener('pointermove',e=>{
   if(drag&&ZOOM>1){ const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
     if(drag.moved||Math.hypot(dx,dy)>4){ drag.moved=true; FX-=dx/(ZOOM*W); FY-=dy/(ZOOM*H); drag.x=e.clientX; drag.y=e.clientY; clampView(); viewChanged(); cv.style.cursor='grabbing'; } return; }
-  if(e.target===cv) cv.style.cursor=hitPlace(...evPos(e))?'pointer':(ZOOM>1?'grab':''); });
+  if(e.target===cv){ hoverPlace=hitPlace(...evPos(e)); cv.style.cursor=hoverPlace?'pointer':(ZOOM>1?'grab':''); } else hoverPlace=null; });
 window.addEventListener('pointerup',()=>{ if(drag&&drag.moved) cv.style.cursor=ZOOM>1?'grab':''; setTimeout(()=>{drag=null;},0); });
 cv.addEventListener('click',e=>{ if(drag&&drag.moved) return; const [x,y]=evPos(e), p=hitPlace(x,y); p?openPop(p,x,y):closePop(); });
 document.addEventListener('pointerdown',e=>{ if(!pop.hidden&&!pop.contains(e.target)&&e.target!==cv) closePop(); });
