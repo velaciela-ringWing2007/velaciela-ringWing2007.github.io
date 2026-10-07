@@ -12,7 +12,7 @@
   :root{
     --bg:#05070d;--bg-g1:#0a1322;--bg-g2:#03040a;
     --panel:rgba(10,16,26,.72);--panel-brd:rgba(90,150,190,.16);
-    --grid:rgba(90,170,210,.10);--grid2:rgba(90,170,210,.22);--land:rgba(90,175,215,.32);
+    --grid:rgba(90,170,210,.10);--grid2:rgba(90,170,210,.22);--land:rgba(120,200,240,.5);--land-fill:rgba(55,140,195,.16);
     --fg:#cfeaf5;--fg-dim:#6f90a2;
     --cyan:#35e0ff;--target:#ff5a4d;--good:#5ef0a8;--warn:#ffb454;--ops:#d4ff3a;--site:#eaf4ff;--glow:rgba(53,224,255,.35);
     color-scheme:dark;
@@ -20,7 +20,7 @@
   :root[data-mode="max"]{
     --bg:#0a0406;--bg-g1:#2a0a12;--bg-g2:#0a0306;
     --panel:rgba(26,10,12,.72);--panel-brd:rgba(190,100,100,.20);
-    --grid:rgba(215,95,95,.10);--grid2:rgba(215,95,95,.24);--land:rgba(210,105,105,.30);
+    --grid:rgba(215,95,95,.10);--grid2:rgba(215,95,95,.24);--land:rgba(235,125,125,.48);--land-fill:rgba(180,60,60,.17);
     --fg:#f5dada;--fg-dim:#b07c7c;
     --cyan:#ff5a4d;--target:#ffcf3a;--good:#5effb0;--warn:#ffb454;--ops:#3affea;--site:#ffe6dc;--glow:rgba(255,90,77,.4);
   }
@@ -344,7 +344,11 @@ function buildBase(){
   for(let i=0;i<=12;i++){ const x=zx(i/12*W); bctx.beginPath();bctx.moveTo(x,0);bctx.lineTo(x,H);bctx.stroke(); }
   for(let lat=-60;lat<=60;lat+=30){ const y=zy((90-lat)/180*H); bctx.beginPath();bctx.moveTo(0,y);bctx.lineTo(W,y);bctx.stroke(); }
   bctx.strokeStyle=getCss('--grid2'); const eq=zy(H/2); bctx.beginPath();bctx.moveTo(0,eq);bctx.lineTo(W,eq);bctx.stroke();
-  bctx.fillStyle=getCss('--land'); const ds=1.35*Math.min(ZOOM,4)**0.6; // 拡大時は大陸ドットも少し大きく
+  // 大陸：2度グリッドのセルを薄く塗って形を出し、その上にドットを重ねる
+  const cw=W*ZOOM/180+0.5, chh=H*ZOOM/90+0.5; // 1セル(2度)ぶんの幅・高さ（+0.5 で隙間を埋める）
+  bctx.fillStyle=getCss('--land-fill');
+  for(let i=0;i<LAND.length;i++){ const p=proj(LAND[i][1],LAND[i][0]); bctx.fillRect(p[0]-cw/2,p[1]-chh/2,cw,chh); }
+  bctx.fillStyle=getCss('--land'); const ds=1.7*Math.min(ZOOM,4)**0.6; // 拡大時は大陸ドットも少し大きく
   for(let i=0;i<LAND.length;i++){ const p=proj(LAND[i][1],LAND[i][0]); bctx.fillRect(p[0]-ds/2,p[1]-ds/2,ds,ds); }
 }
 function resize(){ const r=cv.getBoundingClientRect(); DPR=Math.min(devicePixelRatio||1,2);
