@@ -39,7 +39,7 @@ https://velaciela-ringWing2007.github.io/threat-map/
 | `nmap <地名>` | 指定地点をスキャン（HQから線を飛ばす） |
 | `ping` / `curl` / `ssh` / `hydra` / `attack <地名>` | 同上（演出） |
 | `scan` | 全拠点を一斉スキャン |
-| `defend` | 直近5秒に攻撃してきた相手へ一斉反撃 |
+| `defend` | 直近にHQを攻撃してきた相手へ一斉反撃（対象時間は「反撃対象」で 5秒〜5分 から選択、初期値5秒） |
 | `clear` | 画面クリア |
 
 （↑↓キーでコマンド履歴を辿れます）

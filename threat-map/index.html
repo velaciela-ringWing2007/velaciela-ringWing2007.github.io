@@ -158,6 +158,7 @@
     <button id="retal" class="on">&#8635; RETALIATE</button>
     <button id="mode">MODE: 標準</button>
     <div class="ctl">SPEED <input type="range" id="speed" min="0.25" max="4" step="0.25" value="1"><span id="spd">1.0x</span></div>
+    <div class="ctl"><label for="recent">反撃対象</label> <select id="recent"></select></div>
     <div class="hint">データ差し替え可 &rarr; <b>window.ATTACK.push(ev)</b></div>
   </div>
   <div class="ops">
@@ -205,6 +206,8 @@ const active=new Set([0]);        // 選択中の標的（通常モード）
 let home=0;                       // 自分のいる拠点（HQ）。コマンド攻撃の発射元
 let randomMode=false;             // 全拠点からランダムに狙う
 let retaliate=true;               // 報復攻撃
+let recentSec=5;                  // 一斉反撃の対象：直近この秒数内にHQを攻撃してきた送信元
+const RECENT_OPTS=[5,10,30,60,180,300];
 let mode='std';
 
 let W=0,H=0,DPR=1, CENTER_LNG=139.76;
@@ -273,7 +276,7 @@ function randomEvent(){
 }
 
 /* ════ 状態 ════ */
-let total=0; const counts=new Map(); const arcs=[]; const ripples=[]; const flares=new Map(); const srcStats=new Map(); let hqHits=0; const locks=[]; // locks: コマンド攻撃の着弾マーカー
+let total=0; const counts=new Map(); const arcs=[]; const ripples=[]; const flares=new Map(); const srcStats=new Map(); let hqHits=0; const hqAttackers=new Map(); // hqAttackers: HQを攻撃した送信元 → {t,lat,lng} const locks=[]; // locks: コマンド攻撃の着弾マーカー
 let paused=false, speed=1, spawnAcc=0; let rateWin=[], rateShown=0;
 
 function makeArc(o){ // o:{fromLat,fromLng,toLat,toLng,kind,proto,ip,cc,fromName,toName}
@@ -289,12 +292,13 @@ function emit(ev){
   flares.set(ev.label,performance.now()+600); logLine(ev.ip,T.name,ev.proto,ev.port,ev.cc,T===TARGETS[home]?'hq':'in');
   const st=srcStats.get(ev.label)||{cc:ev.cc,n:0,protos:{}}; // ククリの分析用（送信元都市ごと）
   st.n++; st.protos[ev.proto]=(st.protos[ev.proto]||0)+1; srcStats.set(ev.label,st);
-  if(T===TARGETS[home]) hqHits++;
+  if(T===TARGETS[home]){ hqHits++; hqAttackers.set(ev.label,{t:performance.now(),lat:ev.srcLat,lng:ev.srcLng}); }
 }
 window.ATTACK={push:emit, event:randomEvent};
-const RECENT_MS=5000; // 一斉反撃の対象：直近この時間内に攻撃してきた送信元のみ
-function recentHostiles(){ const cut=performance.now()-RECENT_MS+600; // flares の値は攻撃時刻+600ms
-  return [...flares.entries()].filter(([,t])=>t>cut).map(([name])=>name); }
+const secLabel=s=>s>=60?(s/60)+'分':s+'秒';
+function recentHostiles(){ const cut=performance.now()-recentSec*1000; // 直近 recentSec 秒にHQを攻撃してきた送信元
+  return [...hqAttackers.entries()].filter(([,a])=>a.t>cut).map(([name,a])=>({name,lat:a.lat,lng:a.lng})); }
+function counterAll(){ const hs=recentHostiles(); hs.forEach(h=>playerStrike(h,'counter')); return hs.length; }
 
 function retaliateFrom(a){ // 防衛側 → 攻撃元 への反撃
   makeArc({fromLat:a.toLat,fromLng:a.toLng,toLat:a.fromLat,toLng:a.fromLng,kind:'out',proto:a.proto,ip:a.ip,cc:a.cc,fromName:a.toName,toName:a.fromName,port:a.port});
@@ -417,12 +421,12 @@ let curDay=todayStr();
 function save(){ try{ localStorage.setItem(KEY,JSON.stringify({date:curDay,total,counts:[...counts.entries()]})); }catch(e){} }
 function load(){ try{ const s=JSON.parse(localStorage.getItem(KEY)||'null');
   if(s&&s.date===todayStr()){ total=s.total||0; (s.counts||[]).forEach(([k,v])=>counts.set(k,v)); return true; } }catch(e){} return false; }
-function resetDay(){ curDay=todayStr(); total=0; counts.clear(); srcStats.clear(); hqHits=0; arcs.length=0; ripples.length=0; rateWin=[]; feed.innerHTML=''; drawRank(); save(); }
+function resetDay(){ curDay=todayStr(); total=0; counts.clear(); srcStats.clear(); hqAttackers.clear(); hqHits=0; arcs.length=0; ripples.length=0; rateWin=[]; feed.innerHTML=''; drawRank(); save(); }
 const daylbl=document.getElementById('daylbl');
 function tick(){ const d=new Date();
   document.getElementById('clock').textContent=`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
   if(todayStr()!==curDay) resetDay(); daylbl.textContent=curDay+' · 日替わりリセット'; save(); }
-function savecfg(){ try{ localStorage.setItem(CFG,JSON.stringify({a:[...active],h:home,m:mode,r:randomMode,x:retaliate})); }catch(e){} }
+function savecfg(){ try{ localStorage.setItem(CFG,JSON.stringify({a:[...active],h:home,m:mode,r:randomMode,x:retaliate,w:recentSec})); }catch(e){} }
 
 /* ════ 標的 / モード ════ */
 function applyLabels(){ const nm=document.getElementById('tgtname'), tg=document.getElementById('tgttag');
@@ -441,7 +445,7 @@ chipsEl.addEventListener('change',e=>{ const inp=e.target, i=+inp.dataset.i;
 
 const hqsel=document.getElementById('hqsel');
 hqsel.innerHTML=TARGETS.map((t,i)=>`<option value="${i}">${t.name}</option>`).join('');
-function setHome(i){ home=i; hqsel.value=String(i); updHQ(); recenter(); arcs.length=0; ripples.length=0; buildBase(); savecfg(); }
+function setHome(i){ home=i; hqsel.value=String(i); hqAttackers.clear(); updHQ(); recenter(); arcs.length=0; ripples.length=0; buildBase(); savecfg(); }
 hqsel.addEventListener('change',()=>setHome(+hqsel.value));
 
 const modeBtn=document.getElementById('mode');
@@ -451,6 +455,10 @@ function applyMode(){ document.documentElement.setAttribute('data-mode',mode); c
 const randBtn=document.getElementById('random'), retalBtn=document.getElementById('retal');
 function applyRandom(){ randBtn.classList.toggle('on',randomMode); syncChips(); recenter(); arcs.length=0; ripples.length=0; applyLabels(); updHQ(); buildBase(); }
 function applyRetal(){ retalBtn.classList.toggle('on',retaliate); }
+const recentSel=document.getElementById('recent');
+recentSel.innerHTML=RECENT_OPTS.map(s=>`<option value="${s}">直近${secLabel(s)}</option>`).join('');
+function setRecent(s){ recentSec=s; recentSel.value=String(s); savecfg(); }
+recentSel.addEventListener('change',()=>setRecent(+recentSel.value));
 
 /* ════ 操作 ════ */
 const playBtn=document.getElementById('play');
@@ -486,7 +494,7 @@ const CMDHELP=[
  'nmap &lt;地名&gt;       — 指定地点をスキャン（HQから線を飛ばす）',
  'ping/curl/ssh/hydra/attack &lt;地名&gt; — 同上（演出）',
  'scan              — 全拠点を一斉スキャン',
- 'defend            — 直近5秒に攻撃してきた相手へ一斉反撃',
+ 'defend            — 直近にHQを攻撃してきた相手へ一斉反撃（対象時間は設定で変更）',
  'clear             — 画面クリア',
  '※実際にどこかを攻撃するわけではなく、画面内の演出だよ',
 ];
@@ -506,7 +514,7 @@ function runCmd(raw){
       if(j<0){ techo('HQ にできるのは拠点のみ: '+esc(arg)+'   ( ls で一覧 )','err'); break; }
       setHome(j); techo('HQ relocated &rarr; '+esc(TARGETS[j].name),'ok'); break; }
     case 'scan': TARGETS.forEach(t=>playerStrike({lat:t.lat,lng:t.lng,name:t.name},'scan')); techo('scanning all '+TARGETS.length+' sites ...','ok'); break;
-    case 'defend': case 'shield': { let n=0; recentHostiles().forEach(name=>{ const c=CITIES.find(x=>x[0]===name); if(c){playerStrike({lat:c[2],lng:c[3],name:c[0]},'counter');n++;} }); techo(n?('counter-strike launched @ '+n+' hostiles'):'no recent hostiles (last '+RECENT_MS/1000+'s)','ok'); break; }
+    case 'defend': case 'shield': { const n=counterAll(); techo(n?('counter-strike launched @ '+n+' hostiles'):('no hostiles hit HQ in the last '+recentSec+'s'),'ok'); break; }
     case 'nmap': case 'ping': case 'curl': case 'ssh': case 'hydra': case 'attack': case 'strike': {
       const p=findPlace(arg); if(!p){ techo(arg?('place not found: '+esc(arg)):(cmd+': 地名を指定してね  例) '+cmd+' osaka'),'err'); break; }
       playerStrike(p,cmd); techo(cmd+' &rarr; '+esc(p.name)+' ... packet sent','ok'); break; }
@@ -527,7 +535,7 @@ const CH=[
     ? pickOne(['もう自動反撃モード入ってるよ、ぬかりなし！','反撃は作動中。やられたらやり返す、だね。'])
     : (retaliate=true,applyRetal(),savecfg(),'反撃モード、オンにしといたよ！どんどん撃ち返そ。') },
  {q:'どこが危ない？', run:()=> pickOne([`${topName()}からの波が濃いね、要警戒。`,'全方位から来てるけど、落ち着いて見れば捌けるよ。','今のとこ致命傷なし。囮がよく働いてる。']) },
- {q:'一斉反撃して！', run:()=>{ let n=0; recentHostiles().forEach(name=>{ const c=CITIES.find(x=>x[0]===name); if(c){playerStrike({lat:c[2],lng:c[3],name:c[0]},'counter');n++;} }); return n?`いっきまー…！ ${n}拠点へ反撃完了。`:'ここ数秒で攻撃してきた相手はいないみたい。'; } },
+ {q:'一斉反撃して！', run:()=>{ const n=counterAll(); return n?`いっきまー…！ HQを狙った${n}拠点へ反撃完了。`:`ここ${secLabel(recentSec)}、HQ（${hqTarget().name}）は攻撃を受けてないよ。`; } },
  {q:'ちょっと落ち着かせて', run:()=> pickOne(['だいじょうぶ、ぜんぶ囮だよ。本丸は無傷。深呼吸しよ。','画面は派手だけど実害ゼロ。コーヒーでも飲も？','このネットワークは私が見てるから、安心して。']) },
  {q:'攻撃元を調べて', run:()=>{ const top=[...counts.entries()].sort((a,b)=>b[1]-a[1]).slice(0,6);
     if(!top.length) return 'まだデータがないよ。少し待ってね。';
@@ -557,6 +565,7 @@ const SETTINGS=[
  {q:()=>'配色: '+(mode==='max'?'攻殻MAX → 標準':'標準 → 攻殻MAX'), run:()=>{ mode=mode==='max'?'std':'max'; applyMode(); savecfg(); return mode==='max'?'攻殻MAX、赤く染めたよ。':'標準の配色に戻したよ。'; }, stay:true},
  {q:()=>'RANDOM: '+(randomMode?'ON → OFF':'OFF → ON'), run:()=>{ randomMode=!randomMode; applyRandom(); savecfg(); return randomMode?'全拠点ランダムに切り替えたよ。':'選んだ標的だけに戻したよ。'; }, stay:true},
  {q:()=>paused?'再開して':'一時停止して', run:()=>{ setPaused(!paused); return paused?'いったん止めたよ。':'再開したよ。'; }, stay:true},
+ {q:()=>'反撃対象: 直近'+secLabel(recentSec), run:()=>({say:'HQを狙ってきた相手を、どのくらい前まで反撃対象にする？', sub:RECENT_OPTS.map(s=>({q:'直近'+secLabel(s), run:()=>{ setRecent(s); return `直近${secLabel(s)}にHQを攻撃してきた相手を反撃対象にするね。`; }}))})},
  {q:'速度アップ', run:()=>`速度 ${setSpeed(speed*2)} にしたよ。`, stay:true},
  {q:'速度ダウン', run:()=>`速度 ${setSpeed(speed/2)} にしたよ。`, stay:true},
 ];
@@ -585,11 +594,11 @@ function choose(c,label){ asay(label,'me'); const r=c.run();
     else if(typeof c.t==='number'&&c.t>=0&&c.t<TARGETS.length){ active.clear(); active.add(c.t); }
     if(active.size===0) active.add(0);
     if(typeof c.h==='number'&&c.h>=0&&c.h<TARGETS.length) home=c.h;
-    if(c.m==='max')mode='max'; if(c.r)randomMode=true; if(c.x===false)retaliate=false; } }catch(e){} })();
+    if(c.m==='max')mode='max'; if(c.r)randomMode=true; if(c.x===false)retaliate=false; if(RECENT_OPTS.includes(c.w))recentSec=c.w; } }catch(e){} })();
 document.documentElement.setAttribute('data-mode',mode); clearCss();
 modeBtn.textContent = mode==='max'?'MODE: 攻殻MAX':'MODE: 標準'; modeBtn.classList.toggle('on',mode==='max');
 randBtn.classList.toggle('on',randomMode); retalBtn.classList.toggle('on',retaliate);
-hqsel.value=String(home); buildChips(); syncChips(); recenter(); applyLabels();
+hqsel.value=String(home); recentSel.value=String(recentSec); buildChips(); syncChips(); recenter(); applyLabels();
 resize();
 const had=load(); if(!had) resetDay();
 drawRank(); document.getElementById('total').textContent=total.toLocaleString(); daylbl.textContent=curDay+' · 日替わりリセット';
