@@ -291,14 +291,14 @@ function emit(ev){
   makeArc({fromLat:ev.srcLat,fromLng:ev.srcLng,toLat:T.lat,toLng:T.lng,kind:'in',proto:ev.proto,ip:ev.ip,cc:ev.cc,fromName:ev.label,toName:T.name,port:ev.port});
   flares.set(ev.label,performance.now()+600); logLine(ev.ip,T.name,ev.proto,ev.port,ev.cc,T===TARGETS[home]?'hq':'in');
   const st=srcStats.get(ev.label)||{cc:ev.cc,n:0,protos:{}}; // ククリの分析用（送信元都市ごと）
-  st.n++; st.protos[ev.proto]=(st.protos[ev.proto]||0)+1; srcStats.set(ev.label,st);
+  st.n++; st.lat=ev.srcLat; st.lng=ev.srcLng; st.protos[ev.proto]=(st.protos[ev.proto]||0)+1; srcStats.set(ev.label,st);
   if(T===TARGETS[home]){ hqHits++; hqAttackers.set(ev.label,{t:performance.now(),lat:ev.srcLat,lng:ev.srcLng}); }
 }
 window.ATTACK={push:emit, event:randomEvent};
 const secLabel=s=>s>=60?(s/60)+'分':s+'秒';
-function recentHostiles(){ const cut=performance.now()-recentSec*1000; // 直近 recentSec 秒にHQを攻撃してきた送信元
+function recentHostiles(sec=recentSec){ const cut=performance.now()-sec*1000; // 直近 sec 秒にHQを攻撃してきた送信元
   return [...hqAttackers.entries()].filter(([,a])=>a.t>cut).map(([name,a])=>({name,lat:a.lat,lng:a.lng})); }
-function counterAll(){ const hs=recentHostiles(); hs.forEach(h=>playerStrike(h,'counter')); return hs.length; }
+function counterAll(sec){ const hs=recentHostiles(sec); hs.forEach(h=>playerStrike(h,'counter')); return hs.length; }
 
 function retaliateFrom(a){ // 防衛側 → 攻撃元 への反撃
   makeArc({fromLat:a.toLat,fromLng:a.toLng,toLat:a.fromLat,toLng:a.fromLng,kind:'out',proto:a.proto,ip:a.ip,cc:a.cc,fromName:a.toName,toName:a.fromName,port:a.port});
@@ -478,50 +478,126 @@ function techo(html,cls){ const d=document.createElement('div'); d.className='tl
 function hqTarget(){ return TARGETS[home]; }
 function updHQ(){ const n=hqTarget().name.toUpperCase(); if(hqlbl) hqlbl.textContent='HQ: '+n; document.getElementById('hqname').textContent=n; }
 function topName(){ let best=null,bn=0; for(const [cc,n] of counts){ if(n>bn){bn=n;best=cc;} } return best?(CC_NAME[best]||best):'—'; }
-function findPlace(q){ if(!q)return null; q=q.toLowerCase();
-  let t=TARGETS.find(x=>x.name.toLowerCase()===q)||TARGETS.find(x=>x.name.toLowerCase().startsWith(q))||TARGETS.find(x=>x.name.toLowerCase().includes(q));
-  if(t)return {lat:t.lat,lng:t.lng,name:t.name};
-  let c=CITIES.find(x=>x[0].toLowerCase()===q)||CITIES.find(x=>x[0].toLowerCase().includes(q));
+const norm=s=>String(s).toLowerCase().replace(/[\s.]/g,'');
+function findTarget(q){ q=norm(q); if(!q)return -1;
+  let i=TARGETS.findIndex(x=>norm(x.name)===q); if(i<0)i=TARGETS.findIndex(x=>norm(x.name).startsWith(q)); if(i<0)i=TARGETS.findIndex(x=>norm(x.name).includes(q)); return i; }
+function findPlace(q){ if(!norm(q))return null;
+  const i=findTarget(q); if(i>=0){ const t=TARGETS[i]; return {lat:t.lat,lng:t.lng,name:t.name}; }
+  q=norm(q); const c=CITIES.find(x=>norm(x[0])===q)||CITIES.find(x=>norm(x[0]).includes(q));
   if(c)return {lat:c[2],lng:c[3],name:c[0]}; return null; }
 function playerStrike(place,label){ const HQ=hqTarget();
   makeArc({fromLat:HQ.lat,fromLng:HQ.lng,toLat:place.lat,toLng:place.lng,kind:'player',proto:'OPS',ip:'OPS',cc:'JP',fromName:HQ.name,toName:place.name,port:label||'ops'});
   logLine(HQ.name,place.name,'OPS',label||'strike','OPS','ops'); }
-const CMDHELP=[
- 'help              — コマンド一覧',
- 'ls / targets      — 標的拠点の一覧',
- 'status            — 現在の統計',
- 'hq [地名]         — 自拠点(HQ)の表示 / 変更',
- 'nmap &lt;地名&gt;       — 指定地点をスキャン（HQから線を飛ばす）',
- 'ping/curl/ssh/hydra/attack &lt;地名&gt; — 同上（演出）',
- 'scan              — 全拠点を一斉スキャン',
- 'defend            — 直近にHQを攻撃してきた相手へ一斉反撃（対象時間は設定で変更）',
- 'clear             — 画面クリア',
- '※実際にどこかを攻撃するわけではなく、画面内の演出だよ',
-];
+/* コマンド定義：opts は {短縮:[長い名前, 値の名前(なければnull), 説明]}。help・-h・Tab補完・オプション解析はここから生成 */
+const CMDS={
+ help:   {usage:'help [コマンド]', desc:'コマンド一覧 / 個別の使い方'},
+ ls:     {alias:['targets'], usage:'ls [-s]', desc:'拠点の一覧', opts:{s:['sources',null,'今日の送信元都市を件数順に表示']}},
+ status: {usage:'status', desc:'現在の統計'},
+ hq:     {alias:['home'], usage:'hq [地名]', desc:'自拠点(HQ)の表示 / 変更'},
+ scan:   {usage:'scan [-a | -t | -c CC | -n N] [-w SEC]', desc:'まとめてスキャン（既定: 直近にHQを攻撃してきた相手）', opts:{
+   a:['all',null,'全拠点'], t:['targets',null,'選択中の標的'], c:['country','CC','指定国の送信元都市（例: -c RU）'],
+   n:['top','N','今日の件数上位N都市（1〜20）'], w:['window','SEC','既定の対象時間を今回だけ変更（1〜3600秒）']}},
+ defend: {alias:['shield'], usage:'defend [-w SEC]', desc:'直近にHQを攻撃してきた相手へ一斉反撃', opts:{w:['window','SEC','対象時間を今回だけ変更（既定は設定値）']}},
+ history:{usage:'history', desc:'入力履歴'},
+ date:   {usage:'date', desc:'現在時刻'},
+ whoami: {usage:'whoami', desc:'自分の情報'},
+ clear:  {usage:'clear', desc:'画面クリア'},
+};
+const PROBES=['nmap','ping','curl','ssh','hydra','attack','strike']; // 1地点に線を飛ばす系（演出）
+PROBES.forEach(n=>{ CMDS[n]={usage:n+' [-c N] <地名>', desc:n==='nmap'?'指定地点をスキャン（HQから線を飛ばす）':'指定地点へ線を飛ばす（演出）', opts:{c:['count','N','回数（1〜10）']}, probe:true}; });
+const ALIAS={}; for(const n in CMDS){ ALIAS[n]=n; (CMDS[n].alias||[]).forEach(a=>ALIAS[a]=n); }
+
+function parseArgs(tokens,spec){ // -a / -at / -n 5 / -n5 / --top 5 / --top=5 / -h / --help
+  spec=spec||{}; const o={}, args=[], long={}; for(const k in spec) long[spec[k][0]]=k;
+  for(let i=0;i<tokens.length;i++){ const t=tokens[i];
+    if(t==='-h'||t==='--help'){ o.h=true; continue; }
+    let keys, inl;
+    if(t.startsWith('--')&&t.length>2){ const eq=t.indexOf('='), nm=eq<0?t.slice(2):t.slice(2,eq); if(!(nm in long)) return {err:'unknown option: --'+nm}; keys=[long[nm]]; if(eq>=0) inl=t.slice(eq+1); }
+    else if(t.length>1&&t[0]==='-') keys=[...t.slice(1)];
+    else { args.push(t); continue; }
+    for(let j=0;j<keys.length;j++){ const k=keys[j]; if(!spec[k]) return {err:'unknown option: -'+k};
+      if(spec[k][1]){ const v=inl!==undefined?inl:(j<keys.length-1?keys.slice(j+1).join(''):tokens[++i]);
+        if(v===undefined||v==='') return {err:'option requires a value: -'+k+' '+spec[k][1]}; o[k]=v; break; }
+      o[k]=true; } }
+  return {o,args}; }
+function intOpt(v,lo,hi,name){ const n=Number(v); return Number.isInteger(n)&&n>=lo&&n<=hi?n:(techo(`invalid ${name}: ${esc(v)} (${lo}〜${hi})`,'err'),null); }
+function usage(name){ const c=CMDS[name]; techo('usage: '+esc(c.usage),'sys'); techo('  '+esc(c.desc)+(c.alias?'　（別名: '+c.alias.join(', ')+'）':''),'sys');
+  for(const k in (c.opts||{})){ const [l,v,d]=c.opts[k]; techo(('  -'+k+', --'+l+(v?' '+v:'')).padEnd(26)+esc(d),'sys'); }
+  techo('  -h, --help'.padEnd(26)+'この使い方を表示','sys'); }
+function helpAll(){
+  for(const n in CMDS){ if(CMDS[n].probe) continue; techo(esc(CMDS[n].usage.padEnd(40))+'— '+esc(CMDS[n].desc),'sys'); }
+  techo(esc((PROBES.join('/')+' [-c N] <地名>').padEnd(40))+'— 指定地点へ線を飛ばす（演出）','sys');
+  techo('Tab: 補完　↑↓: 履歴　&lt;コマンド&gt; -h: 詳しい使い方','sys');
+  techo('※実際にどこかを攻撃するわけではなく、画面内の演出だよ','sys'); }
+const asPlace=t=>({lat:t.lat,lng:t.lng,name:t.name});
+function fireAll(list,label){ list.forEach((p,i)=>setTimeout(()=>playerStrike(p,label),i*60)); return list.length; }
+function cmdScan(o){
+  const modes=['a','t','c','n'].filter(k=>o[k]); if(modes.length>1){ techo('scan: -a / -t / -c / -n は同時に指定できません','err'); return; }
+  let list, what;
+  if(o.a){ list=TARGETS.map(asPlace); what='all '+list.length+' sites'; }
+  else if(o.t){ list=(randomMode?TARGETS:[...active].map(i=>TARGETS[i])).map(asPlace); what=list.length+' target site(s)'+(randomMode?' (RANDOM: all)':''); }
+  else if(o.c){ const cc=o.c.toUpperCase(); list=CITIES.filter(c=>c[1]===cc).map(c=>({lat:c[2],lng:c[3],name:c[0]}));
+    if(!list.length){ techo('scan: 送信元に該当する国コードがありません: '+esc(o.c)+'   ( ls -s で確認 )','err'); return; } what=list.length+' source(s) in '+(CC_NAME[cc]||cc); }
+  else if(o.n){ const n=intOpt(o.n,1,20,'N'); if(n===null) return;
+    list=[...srcStats.entries()].sort((a,b)=>b[1].n-a[1].n).slice(0,n).map(([name,st])=>({lat:st.lat,lng:st.lng,name}));
+    if(!list.length){ techo('scan: まだ送信元の集計がありません','err'); return; } what='top '+list.length+' source(s) today'; }
+  else { const sec=o.w?intOpt(o.w,1,3600,'SEC'):recentSec; if(sec===null) return;
+    list=recentHostiles(sec); if(!list.length){ techo('scan: no hostiles hit HQ in the last '+sec+'s','sys'); return; } what=list.length+' hostile(s) from last '+sec+'s'; }
+  if(o.w&&(o.a||o.t||o.c||o.n)) techo('scan: -w は既定モード（オプションなし）でのみ有効です','sys');
+  fireAll(list,'scan'); techo('scanning '+esc(what)+' ...','ok');
+  list.slice(0,8).forEach(p=>techo('  &#9656; '+esc(p.name),'sys')); if(list.length>8) techo('  ... and '+(list.length-8)+' more','sys'); }
 let hist=[], hix=0;
 function runCmd(raw){
   techo('<span class="tp">def@shell:~$</span> '+esc(raw));
   const line=raw.trim(); if(!line)return; hist.push(line); hix=hist.length;
-  const parts=line.split(/\s+/), cmd=parts[0].toLowerCase(), arg=parts.slice(1).join(' ');
+  const parts=line.split(/\s+/), typed=parts[0].toLowerCase(), cmd=ALIAS[typed]||(typed==='?'?'help':null);
+  if(!cmd){ techo('command not found: '+esc(typed)+'   ( help で一覧 )','err'); return; }
+  const P=parseArgs(parts.slice(1),CMDS[cmd].opts); if(P.err){ techo(cmd+': '+esc(P.err)+'   ( '+cmd+' -h で使い方 )','err'); return; }
+  const o=P.o, arg=P.args.join(' ');
+  if(o.h){ usage(cmd); return; }
+  if(CMDS[cmd].probe){
+    const p=findPlace(arg); if(!p){ techo(arg?(cmd+': place not found: '+esc(arg)):(cmd+': 地名を指定してね  例) '+cmd+' osaka'),'err'); return; }
+    const n=o.c?intOpt(o.c,1,10,'N'):1; if(n===null) return;
+    for(let i=0;i<n;i++) setTimeout(()=>playerStrike(p,cmd),i*250);
+    techo(cmd+' &rarr; '+esc(p.name)+(n>1?' x'+n:'')+' ... packet sent','ok'); return; }
   switch(cmd){
-    case 'help': case '?': CMDHELP.forEach(l=>techo(l,'sys')); break;
-    case 'ls': case 'targets': techo(TARGETS.map(t=>t.name).join('   '),'sys'); break;
-    case 'status': techo('ATTACKS TODAY: '+total.toLocaleString()+'　/　TOP SOURCE: '+topName()+'　/　RETALIATE: '+(retaliate?'ON':'OFF'),'ok'); break;
+    case 'help': if(arg){ const c=ALIAS[arg.toLowerCase()]; c?usage(c):techo('help: no such command: '+esc(arg),'err'); } else helpAll(); break;
+    case 'ls':
+      if(o.s){ const top=[...srcStats.entries()].sort((a,b)=>b[1].n-a[1].n).slice(0,12);
+        if(!top.length){ techo('まだ送信元の集計がありません','sys'); break; }
+        top.forEach(([name,st])=>techo((name+' ['+st.cc+']').padEnd(22)+st.n.toLocaleString(),'sys')); }
+      else techo(TARGETS.map(t=>t.name).join('   '),'sys');
+      break;
+    case 'status': techo('ATTACKS TODAY: '+total.toLocaleString()+'　/　HQ HITS: '+hqHits.toLocaleString()+'　/　TOP SOURCE: '+topName()+'　/　RETALIATE: '+(retaliate?'ON':'OFF')+'　/　WINDOW: '+recentSec+'s','ok'); break;
     case 'clear': term.innerHTML=''; break;
-    case 'hq': case 'home': {
+    case 'history': hist.forEach((h,i)=>techo(String(i+1).padStart(4)+'  '+esc(h),'sys')); break;
+    case 'date': techo(new Date().toString(),'sys'); break;
+    case 'whoami': techo('def　（HQ: '+esc(hqTarget().name)+' / MODE: '+(mode==='max'?'攻殻MAX':'標準')+'）','sys'); break;
+    case 'hq': {
       if(!arg){ techo('HQ: '+hqTarget().name+'   ( hq &lt;地名&gt; で移動 )','sys'); break; }
-      const q=arg.toLowerCase(), i=TARGETS.findIndex(x=>x.name.toLowerCase().startsWith(q)), j=i>=0?i:TARGETS.findIndex(x=>x.name.toLowerCase().includes(q));
+      const j=findTarget(arg);
       if(j<0){ techo('HQ にできるのは拠点のみ: '+esc(arg)+'   ( ls で一覧 )','err'); break; }
       setHome(j); techo('HQ relocated &rarr; '+esc(TARGETS[j].name),'ok'); break; }
-    case 'scan': TARGETS.forEach(t=>playerStrike({lat:t.lat,lng:t.lng,name:t.name},'scan')); techo('scanning all '+TARGETS.length+' sites ...','ok'); break;
-    case 'defend': case 'shield': { const n=counterAll(); techo(n?('counter-strike launched @ '+n+' hostiles'):('no hostiles hit HQ in the last '+recentSec+'s'),'ok'); break; }
-    case 'nmap': case 'ping': case 'curl': case 'ssh': case 'hydra': case 'attack': case 'strike': {
-      const p=findPlace(arg); if(!p){ techo(arg?('place not found: '+esc(arg)):(cmd+': 地名を指定してね  例) '+cmd+' osaka'),'err'); break; }
-      playerStrike(p,cmd); techo(cmd+' &rarr; '+esc(p.name)+' ... packet sent','ok'); break; }
-    default: techo('command not found: '+esc(cmd)+'   ( help で一覧 )','err');
+    case 'scan': cmdScan(o); break;
+    case 'defend': { const sec=o.w?intOpt(o.w,1,3600,'SEC'):recentSec; if(sec===null) break;
+      const n=counterAll(sec); techo(n?('counter-strike launched @ '+n+' hostiles (last '+sec+'s)'):('no hostiles hit HQ in the last '+sec+'s'),'ok'); break; }
   }
 }
+/* Tab補完：1語目はコマンド、- で始まればそのコマンドのロングオプション、それ以外は地名 */
+const PLACE_WORDS=[...new Set([...TARGETS.map(t=>norm(t.name)),...CITIES.map(c=>norm(c[0]))])];
+function complete(){
+  const v=tin.value, m=v.match(/(\S*)$/), cur=m[1].toLowerCase(), before=v.slice(0,v.length-m[1].length), first=!before.trim();
+  let pool;
+  if(first) pool=Object.keys(ALIAS);
+  else { const c=ALIAS[before.trim().split(/\s+/)[0].toLowerCase()];
+    if(cur.startsWith('-')) pool=c?['--help',...Object.values(CMDS[c].opts||{}).map(x=>'--'+x[0])]:[];
+    else pool=c==='hq'?TARGETS.map(t=>norm(t.name)):PLACE_WORDS; }
+  const hits=pool.filter(w=>w.startsWith(cur)).sort(); if(!hits.length) return;
+  if(hits.length===1){ tin.value=before+hits[0]+' '; return; }
+  let pre=hits[0]; for(const h of hits) while(!h.startsWith(pre)) pre=pre.slice(0,-1);
+  if(pre.length>cur.length) tin.value=before+pre; else techo(hits.join('   '),'sys'); }
 tin.addEventListener('keydown',e=>{ if(e.key==='Enter'){ runCmd(tin.value); tin.value=''; }
+  else if(e.key==='Tab'&&tin.value.trim()){ e.preventDefault(); complete(); } // 空欄なら通常のフォーカス移動
   else if(e.key==='ArrowUp'){ if(hix>0){hix--;tin.value=hist[hix]||'';} e.preventDefault(); }
   else if(e.key==='ArrowDown'){ if(hix<hist.length-1){hix++;tin.value=hist[hix]||'';}else{hix=hist.length;tin.value='';} e.preventDefault(); } });
 
