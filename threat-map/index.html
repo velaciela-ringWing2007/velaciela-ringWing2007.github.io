@@ -276,7 +276,8 @@ function randomEvent(){
 }
 
 /* ════ 状態 ════ */
-let total=0; const counts=new Map(); const arcs=[]; const ripples=[]; const flares=new Map(); const srcStats=new Map(); let hqHits=0; const hqAttackers=new Map(); // hqAttackers: HQを攻撃した送信元 → {t,lat,lng} const locks=[]; // locks: コマンド攻撃の着弾マーカー
+let total=0; const counts=new Map(); const arcs=[]; const ripples=[]; const flares=new Map(); const srcStats=new Map(); let hqHits=0; const hqAttackers=new Map(); const locks=[];
+// hqAttackers: HQを攻撃した送信元 → {t,lat,lng} / locks: コマンド攻撃の着弾マーカー
 let paused=false, speed=1, spawnAcc=0; let rateWin=[], rateShown=0;
 
 function makeArc(o){ // o:{fromLat,fromLng,toLat,toLng,kind,proto,ip,cc,fromName,toName}
