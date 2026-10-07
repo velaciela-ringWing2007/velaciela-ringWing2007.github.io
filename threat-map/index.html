@@ -212,9 +212,7 @@ const cssCache={};
 function getCss(v){ if(!(v in cssCache)) cssCache[v]=getComputedStyle(document.documentElement).getPropertyValue(v).trim(); return cssCache[v]; }
 function clearCss(){ for(const k in cssCache) delete cssCache[k]; }
 function proj(lat,lng){ let s=((lng-CENTER_LNG+540)%360)-180; return [ (s+180)/360*W, (90-lat)/180*H ]; }
-function recenter(){ if(randomMode){ CENTER_LNG=TARGETS[home].lng; return; }
-  let x=0,y=0; for(const i of active){ const r=TARGETS[i].lng*Math.PI/180; x+=Math.cos(r); y+=Math.sin(r); }
-  if(x||y) CENTER_LNG=Math.atan2(y,x)*180/Math.PI; }
+function recenter(){ CENTER_LNG=TARGETS[home].lng; } // 地図の中心は常に自拠点（HQ）
 
 const base=document.createElement('canvas'), bctx=base.getContext('2d');
 function buildBase(){
@@ -440,7 +438,7 @@ chipsEl.addEventListener('change',e=>{ const inp=e.target, i=+inp.dataset.i;
 
 const hqsel=document.getElementById('hqsel');
 hqsel.innerHTML=TARGETS.map((t,i)=>`<option value="${i}">${t.name}</option>`).join('');
-function setHome(i){ home=i; hqsel.value=String(i); updHQ(); if(randomMode){ recenter(); arcs.length=0; ripples.length=0; buildBase(); } savecfg(); }
+function setHome(i){ home=i; hqsel.value=String(i); updHQ(); recenter(); arcs.length=0; ripples.length=0; buildBase(); savecfg(); }
 hqsel.addEventListener('change',()=>setHome(+hqsel.value));
 
 const modeBtn=document.getElementById('mode');
