@@ -38,6 +38,9 @@
 ├── paint-calculator/          # 塗料計算
 │   ├── index.html
 │   └── manifest.json
+├── threat-map/                # 攻撃監視コンソール
+│   ├── index.html
+│   └── README.md
 └── README.md
 ```
 
@@ -140,6 +143,23 @@ https://velaciela-ringWing2007.github.io/clock-print/
 https://velaciela-ringWing2007.github.io/paint-calculator/
 
 塗料の硬化剤・希釈液の配合量を計算。
+
+---
+
+## 🌐 攻撃監視コンソール
+
+https://velaciela-ringWing2007.github.io/threat-map/
+
+世界地図に攻撃線が飛び交う、サイバー攻撃監視画面の演出（シミュレーション）。攻撃イベントはすべてブラウザ内でランダム生成しています。
+
+### 機能
+
+- **日本中心の世界地図** - 16拠点から標的を複数選択可能
+- **RANDOM / RETALIATE / 攻殻MAX モード**
+- **コマンドコンソール** - `nmap osaka` などで能動的に線を飛ばせる
+- **防衛支援AI〈ククリ〉** - 選択肢式アシスタント
+
+詳細は [threat-map/README.md](threat-map/README.md) を参照。
 
 ---
 

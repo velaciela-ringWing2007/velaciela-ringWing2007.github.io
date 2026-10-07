@@ -7,9 +7,7 @@
 
 ## デモ
 
-`https://<ユーザ名>.github.io/<リポジトリ名>/threat-map/`
-
-（GitHub Pages を有効化すると上記パスで公開されます）
+https://velaciela-ringWing2007.github.io/threat-map/
 
 ## できること
 
