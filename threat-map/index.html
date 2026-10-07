@@ -102,6 +102,13 @@
   .chip .cd{width:6px;height:6px;border-radius:50%;background:var(--fg-dim)}
   .chip.sel{color:#fff;border-color:var(--cyan);background:color-mix(in srgb,var(--cyan) 15%,transparent)}
   .chip.sel .cd{background:var(--target);box-shadow:0 0 6px var(--target)}
+  .chip.sel.ops{border-color:var(--ops);background:color-mix(in srgb,var(--ops) 14%,transparent)}
+  .chip.sel.ops .cd{background:var(--ops);box-shadow:0 0 6px var(--ops)}
+  .chip.dis{opacity:.35;pointer-events:none}
+  .tmode{display:flex;gap:4px;flex:0 0 auto}
+  .tmode button{font-size:10px;padding:4px 9px;letter-spacing:.06em}
+  .tmode button.on[data-m="out"]{border-color:var(--ops);background:color-mix(in srgb,var(--ops) 14%,transparent)}
+  .tmode button b{font-weight:400;margin-left:4px}
   .controls{display:flex;align-items:center;gap:12px 14px;flex-wrap:wrap;border:1px solid var(--panel-brd);background:var(--panel);border-radius:10px;padding:10px 16px}
   button{font-family:inherit;color:var(--fg);background:rgba(120,160,190,.07);border:1px solid var(--panel-brd);border-radius:7px;padding:7px 14px;cursor:pointer;letter-spacing:.12em;font-size:12px;transition:background .15s,border-color .15s,color .15s}
   button:hover{background:rgba(120,160,190,.16);border-color:var(--cyan)}
@@ -175,6 +182,7 @@
     <div class="status">
       <span class="live"><span class="dot"></span>LIVE</span>
       <span><span class="lbl">HQ </span><b id="hqname" style="color:var(--ops);font-weight:400">TOKYO</b></span>
+      <span><span class="lbl">OPS </span><b id="opsname" style="color:var(--ops);font-weight:400">&mdash;</b></span>
       <span><span class="lbl">TARGET </span><b id="tgtname" style="color:var(--target);font-weight:400">JAPAN / TOKYO</b></span>
       <span class="clock" id="clock">--:--:--</span>
       <span class="hbtns"><button id="viewbtn" title="見るだけモード（V）">&#9707; 見るだけ</button><button id="fsbtn" title="全画面（F）">&#9974; 全画面</button></span>
@@ -198,7 +206,7 @@
   <div class="dockhead">操作パネル <button id="dockclose">&#9660; 閉じる</button></div>
   <div class="targetbar">
     <div class="hqbox"><label class="tlabel" for="hqsel">&#9670; HQ（自拠点）</label><select id="hqsel"></select></div>
-    <span class="tlabel">TARGETS</span><div class="tgtsel"><div class="regions" id="regions" role="tablist" aria-label="地域"></div><div class="chips" id="chips"></div></div>
+    <span class="tlabel">TARGETS</span><div class="tmode" id="tmode" role="tablist" aria-label="標的の種類"><button type="button" data-m="in" title="世界から狙われる標的">&#9664; 世界から<b id="tmIn"></b></button><button type="button" data-m="out" title="HQから狙う標的（自動で線が飛ぶ）">HQから &#9654;<b id="tmOut"></b></button></div><div class="tgtsel"><div class="regions" id="regions" role="tablist" aria-label="地域"></div><div class="chips" id="chips"></div></div>
   </div>
   <div class="controls">
     <button id="play" class="on">&#10074;&#10074; PAUSE</button>
@@ -309,7 +317,9 @@ const CC_NAME={JP:"Japan",US:"United States",GB:"U.K.",RU:"Russia",SG:"Singapore
 const TARGETS=PLACE_DB.map(([name,cc,lat,lng,region])=>{ const C=(cc==='JP'?'JAPAN':(CC_NAME[cc]||cc).toUpperCase()), N=name.toUpperCase();
   return {name,cc,lat,lng,region,jp:C+' / '+N,tag:'TO '+(cc==='JP'?N:C)}; });
 TARGETS[0].tag='TO JAPAN';
-const active=new Set([0]);        // 選択中の標的（通常モード）
+const active=new Set([0]);        // 世界から狙われる標的（通常モード）
+const outTargets=new Set();       // HQから狙う標的（自動で線が飛ぶ）
+let tgtMode='in';                 // 標的バーの編集対象: 'in'=世界から / 'out'=HQから
 let home=0;                       // 自分のいる拠点（HQ）。コマンド攻撃の発射元
 let randomMode=false;             // 全拠点からランダムに狙う
 let retaliate=true;               // 報復攻撃
@@ -368,7 +378,7 @@ function randomEvent(){
 /* ════ 状態 ════ */
 let total=0; const counts=new Map(); const arcs=[]; const ripples=[]; const flares=new Map(); const srcStats=new Map(); let hqHits=0; const hqAttackers=new Map(); const locks=[];
 // hqAttackers: HQを攻撃した送信元 → {t,lat,lng} / locks: コマンド攻撃の着弾マーカー
-let paused=false, speed=1, spawnAcc=0; let rateWin=[], rateShown=0;
+let paused=false, speed=1, spawnAcc=0, opsAcc=0; let rateWin=[], rateShown=0;
 
 function arcGeom(a){ // 緯度経度 → 画面上の始点・制御点・終点
   const [sx,sy]=proj(a.fromLat,a.fromLng), [tx,ty]=proj(a.toLat,a.toLng);
@@ -445,6 +455,10 @@ function drawTargets(now){
     ctx.strokeStyle=`rgba(${r},${g},${b},${(1-t)*.6})`;ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(x,y,4+t*16,0,7);ctx.stroke();
     ctx.beginPath();ctx.arc(x,y,3,0,7);ctx.fillStyle=`rgb(${r},${g},${b})`;ctx.shadowBlur=14;ctx.shadowColor=`rgb(${r},${g},${b})`;ctx.fill();ctx.shadowBlur=0; }
 }
+function drawOutTargets(now){ // HQの標的：HQ色の点線リング（回転）
+  if(!outTargets.size) return; const col=getCss('--ops'); ctx.strokeStyle=col; ctx.lineWidth=1.3; ctx.setLineDash([3,3]); ctx.lineDashOffset=-now/80;
+  for(const i of outTargets){ const [x,y]=proj(TARGETS[i].lat,TARGETS[i].lng); ctx.beginPath(); ctx.arc(x,y,7,0,7); ctx.stroke(); }
+  ctx.setLineDash([]); ctx.lineDashOffset=0; }
 function drawHQ(now){ // 自拠点：菱形＋HQラベル
   const T=TARGETS[home], [x,y]=proj(T.lat,T.lng), col=getCss('--ops'), s=6+Math.sin(now/400)*1.2;
   ctx.strokeStyle=col;ctx.lineWidth=1.6;ctx.shadowBlur=10;ctx.shadowColor=col;
@@ -496,16 +510,17 @@ let last=performance.now();
 function frame(now){
   const dt=Math.min((now-last)/1000,0.05); last=now;
   if(!paused){ spawnAcc+=dt*speed*7; while(spawnAcc>=1){ emit(randomEvent()); spawnAcc-=1; }
+    if(outTargets.size){ opsAcc+=dt*speed*0.8; while(opsAcc>=1){ opsAcc-=1; const ot=[...outTargets]; playerStrike(asPlace(TARGETS[ot[Math.floor(Math.random()*ot.length)]]),'auto'); } }
     for(const a of arcs){ a.t+=dt*a.speed;
       if(!a.done&&a.t>=1){ a.done=true; ripples.push({x:a.tx,y:a.ty,born:now,kind:a.kind});
-        if(a.kind==='player') locks.push({lat:a.toLat,lng:a.toLng,born:now,label:String(a.port).toUpperCase()+' \u25B8 '+String(a.toName).toUpperCase()});
+        if(a.kind==='player'&&a.port!=='auto') locks.push({lat:a.toLat,lng:a.toLng,born:now,label:String(a.port).toUpperCase()+' \u25B8 '+String(a.toName).toUpperCase()});
         if(a.kind==='in'&&retaliate&&Math.random()<0.28) retaliateFrom(a); } }
     for(let i=arcs.length-1;i>=0;i--) if(arcs[i].t>1.15) arcs.splice(i,1);
     for(let i=ripples.length-1;i>=0;i--) if(now-ripples[i].born>700) ripples.splice(i,1);
     for(let i=locks.length-1;i>=0;i--) if(now-locks[i].born>LOCK_MS) locks.splice(i,1);
   }
   ctx.clearRect(0,0,W,H); ctx.drawImage(base,0,0,W,H);
-  drawCities(now); for(const a of arcs) drawArc(a); drawTargets(now); drawHQ(now); drawLocks(now); drawRipples(now);
+  drawCities(now); for(const a of arcs) drawArc(a); drawTargets(now); drawOutTargets(now); drawHQ(now); drawLocks(now); drawRipples(now);
   document.getElementById('total').textContent=total.toLocaleString();
   rankAcc+=dt; if(rankAcc>0.4){drawRank();rankAcc=0;}
   const cut=now-1000; while(rateWin.length&&rateWin[0]<cut)rateWin.shift();
@@ -525,7 +540,7 @@ const daylbl=document.getElementById('daylbl');
 function tick(){ const d=new Date();
   document.getElementById('clock').textContent=`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
   if(todayStr()!==curDay) resetDay(); daylbl.textContent=curDay+' · 日替わりリセット'; save(); }
-function savecfg(){ try{ localStorage.setItem(CFG,JSON.stringify({a:[...active],h:home,m:mode,r:randomMode,x:retaliate,w:recentSec,v:viewMode})); }catch(e){} }
+function savecfg(){ try{ localStorage.setItem(CFG,JSON.stringify({a:[...active],h:home,m:mode,r:randomMode,x:retaliate,w:recentSec,v:viewMode,o:[...outTargets]})); }catch(e){} }
 
 /* ════ 標的 / モード ════ */
 function applyLabels(){ const nm=document.getElementById('tgtname'), tg=document.getElementById('tgttag');
@@ -539,19 +554,26 @@ function buildChips(){ if(!curRegion) curRegion=TARGETS[home].region;
   chipsEl.innerHTML=TARGETS.map((t,i)=>
   `<label class="chip${active.has(i)?' sel':''}"><input type="checkbox" data-i="${i}"${active.has(i)?' checked':''}><span class="cd"></span>${t.name}</label>`).join(''); }
 regionsEl.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; curRegion=b.dataset.r; syncChips(); });
-function syncChips(){ [...chipsEl.querySelectorAll('.chip')].forEach(l=>{ const idx=+l.querySelector('input').dataset.i;
-  l.classList.toggle('sel',active.has(idx)); l.querySelector('input').checked=active.has(idx); l.hidden=TARGETS[idx].region!==curRegion; });
-  [...regionsEl.children].forEach(b=>{ const r=b.dataset.r, n=[...active].filter(i=>TARGETS[i].region===r).length;
+function syncChips(){ const out=tgtMode==='out', set=out?outTargets:active;
+  [...chipsEl.querySelectorAll('.chip')].forEach(l=>{ const inp=l.querySelector('input'), idx=+inp.dataset.i, dis=out&&idx===home;
+    l.classList.toggle('sel',set.has(idx)); l.classList.toggle('ops',out); l.classList.toggle('dis',dis); inp.disabled=dis;
+    inp.checked=set.has(idx); l.hidden=TARGETS[idx].region!==curRegion; });
+  [...regionsEl.children].forEach(b=>{ const r=b.dataset.r, n=[...set].filter(i=>TARGETS[i].region===r).length;
     b.classList.toggle('on',r===curRegion); b.setAttribute('aria-selected',String(r===curRegion)); b.querySelector('b').textContent=n?String(n):''; });
-  chipsEl.classList.toggle('lock',randomMode); }
+  [...document.querySelectorAll('#tmode button')].forEach(b=>{ b.classList.toggle('on',b.dataset.m===tgtMode); b.setAttribute('aria-selected',String(b.dataset.m===tgtMode)); });
+  document.getElementById('tmIn').textContent=randomMode?'RND':active.size; document.getElementById('tmOut').textContent=outTargets.size||'';
+  chipsEl.classList.toggle('lock',randomMode&&!out); }
+document.getElementById('tmode').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; tgtMode=b.dataset.m; syncChips(); });
+function updOps(){ document.getElementById('opsname').innerHTML=outTargets.size?outTargets.size+' SITE'+(outTargets.size>1?'S':''):'&mdash;'; }
+function toggleOut(i){ if(i===home) return false; outTargets.has(i)?outTargets.delete(i):outTargets.add(i); syncChips(); updOps(); savecfg(); return true; }
 function toggleTarget(i){ // 最後の1つは外せない
   if(active.has(i)){ if(active.size<=1) return false; active.delete(i); } else active.add(i);
   syncChips(); recenter(); arcs.length=0; ripples.length=0; applyLabels(); updHQ(); buildBase(); savecfg(); return true; }
-chipsEl.addEventListener('change',e=>{ if(!toggleTarget(+e.target.dataset.i)) e.target.checked=true; });
+chipsEl.addEventListener('change',e=>{ const i=+e.target.dataset.i; if(!(tgtMode==='out'?toggleOut(i):toggleTarget(i))) e.target.checked=!e.target.checked; });
 
 const hqsel=document.getElementById('hqsel');
 hqsel.innerHTML=REGIONS.map(r=>`<optgroup label="${r}">`+TARGETS.map((t,i)=>[t,i]).filter(([t])=>t.region===r).map(([t,i])=>`<option value="${i}">${t.name}</option>`).join('')+'</optgroup>').join('');
-function setHome(i){ home=i; hqsel.value=String(i); hqAttackers.clear(); ZOOM=1; FX=FY=.5; updZoomUI(); updHQ(); recenter(); arcs.length=0; ripples.length=0; buildBase(); savecfg(); }
+function setHome(i){ home=i; hqsel.value=String(i); hqAttackers.clear(); outTargets.delete(i); syncChips(); updOps(); ZOOM=1; FX=FY=.5; updZoomUI(); updHQ(); recenter(); arcs.length=0; ripples.length=0; buildBase(); savecfg(); }
 hqsel.addEventListener('change',()=>setHome(+hqsel.value));
 
 const modeBtn=document.getElementById('mode');
@@ -616,7 +638,7 @@ const CMDS={
  status: {usage:'status', desc:'現在の統計'},
  hq:     {alias:['home'], usage:'hq [地名]', desc:'自拠点(HQ)の表示 / 変更'},
  scan:   {usage:'scan [-a | -t | -c CC | -n N] [-w SEC]', desc:'まとめてスキャン（既定: 直近にHQを攻撃してきた相手）', opts:{
-   a:['all',null,'HQ以外の全拠点（攻撃の有無に関係なく）'], t:['targets',null,'選択中の標的（HQは除く）'], c:['country','CC','指定国の送信元都市（例: -c RU）'],
+   a:['all',null,'HQ以外の全拠点（攻撃の有無に関係なく）'], t:['targets',null,'HQの標的（標的バーの「HQから」で選択）'], c:['country','CC','指定国の送信元都市（例: -c RU）'],
    n:['top','N','今日の件数上位N都市（1〜20）'], w:['window','SEC','既定の対象時間を今回だけ変更（1〜3600秒）']}},
  defend: {alias:['shield'], usage:'defend [-w SEC]', desc:'直近にHQを攻撃してきた相手へ一斉反撃', opts:{w:['window','SEC','対象時間を今回だけ変更（既定は設定値）']}},
  history:{usage:'history', desc:'入力履歴'},
@@ -656,7 +678,8 @@ function cmdScan(o){
   const modes=['a','t','c','n'].filter(k=>o[k]); if(modes.length>1){ techo('scan: -a / -t / -c / -n は同時に指定できません','err'); return; }
   let list, what;
   if(o.a){ list=TARGETS.filter((t,i)=>i!==home).map(asPlace); what='all '+list.length+' sites except HQ'; }
-  else if(o.t){ list=(randomMode?TARGETS:[...active].map(i=>TARGETS[i])).map(asPlace); what=list.length+' target site(s)'+(randomMode?' (RANDOM: all)':''); }
+  else if(o.t){ list=[...outTargets].map(i=>asPlace(TARGETS[i]));
+    if(!list.length){ techo('scan: HQの標的が未設定です（標的バーの「HQから &#9654;」で選んでね）','err'); return; } what=list.length+' HQ target(s)'; }
   else if(o.c){ const cc=o.c.toUpperCase(); list=CITIES.filter(c=>c[1]===cc).map(c=>({lat:c[2],lng:c[3],name:c[0]}));
     if(!list.length){ techo('scan: 送信元に該当する国コードがありません: '+esc(o.c)+'   ( ls -s で確認 )','err'); return; } what=list.length+' source(s) in '+(CC_NAME[cc]||cc); }
   else if(o.n){ const n=intOpt(o.n,1,20,'N'); if(n===null) return;
@@ -822,7 +845,8 @@ function openPop(p,x,y){ pop.innerHTML=''; const isHQ=p.ti===home, st=srcStats.g
   if(!isHQ){ const a=norm(p.name); ['nmap','ping','curl'].forEach(c=>popBtn('&#9673; '+c,()=>runCmd(c+' '+a))); }
   if(p.ti!==undefined){
     if(!isHQ) popBtn('&#9670; HQにする',()=>{ setHome(p.ti); techo('HQ relocated &rarr; '+esc(p.name),'ok'); });
-    const on=active.has(p.ti); popBtn(on?'&minus; 標的から外す':'&#43; 標的に追加',()=>toggleTarget(p.ti),randomMode||(on&&active.size<=1)); }
+    const on=active.has(p.ti); popBtn(on?'&minus; 世界からの標的から外す':'&#43; 世界からの標的に追加',()=>toggleTarget(p.ti),randomMode||(on&&active.size<=1));
+    if(!isHQ) popBtn(outTargets.has(p.ti)?'&minus; HQの標的から外す':'&#9654; HQの標的に追加',()=>toggleOut(p.ti)); }
   pop.hidden=false; const pw=pop.offsetWidth, ph=pop.offsetHeight;
   pop.style.left=Math.max(8,Math.min(x+12,mapwrap.clientWidth-pw-8))+'px'; pop.style.top=Math.max(8,Math.min(y+12,mapwrap.clientHeight-ph-8))+'px';
   const f=pop.querySelector('button:not(:disabled)'); if(f) f.focus({preventScroll:true}); }
@@ -834,11 +858,11 @@ function closePop(){ pop.hidden=true; }
     else if(typeof c.t==='number'&&c.t>=0&&c.t<TARGETS.length){ active.clear(); active.add(c.t); }
     if(active.size===0) active.add(0);
     if(typeof c.h==='number'&&c.h>=0&&c.h<TARGETS.length) home=c.h;
-    if(c.m==='max')mode='max'; if(c.r)randomMode=true; if(c.x===false)retaliate=false; if(RECENT_OPTS.includes(c.w))recentSec=c.w; if(c.v)viewMode=true; } }catch(e){} })();
+    if(c.m==='max')mode='max'; if(c.r)randomMode=true; if(c.x===false)retaliate=false; if(RECENT_OPTS.includes(c.w))recentSec=c.w; if(c.v)viewMode=true; if(Array.isArray(c.o)) c.o.forEach(i=>{ if(i>=0&&i<TARGETS.length&&i!==home) outTargets.add(i); }); } }catch(e){} })();
 document.documentElement.setAttribute('data-mode',mode); clearCss();
 modeBtn.textContent = mode==='max'?'MODE: 攻殻MAX':'MODE: 標準'; modeBtn.classList.toggle('on',mode==='max');
 randBtn.classList.toggle('on',randomMode); retalBtn.classList.toggle('on',retaliate);
-hqsel.value=String(home); recentSel.value=String(recentSec); applyView(); buildChips(); syncChips(); recenter(); applyLabels();
+hqsel.value=String(home); recentSel.value=String(recentSec); applyView(); buildChips(); syncChips(); updOps(); recenter(); applyLabels();
 resize();
 const had=load(); if(!had) resetDay();
 drawRank(); document.getElementById('total').textContent=total.toLocaleString(); daylbl.textContent=curDay+' · 日替わりリセット';
