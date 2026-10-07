@@ -292,6 +292,9 @@ function emit(ev){
   if(T===TARGETS[home]) hqHits++;
 }
 window.ATTACK={push:emit, event:randomEvent};
+const RECENT_MS=5000; // 一斉反撃の対象：直近この時間内に攻撃してきた送信元のみ
+function recentHostiles(){ const cut=performance.now()-RECENT_MS+600; // flares の値は攻撃時刻+600ms
+  return [...flares.entries()].filter(([,t])=>t>cut).map(([name])=>name); }
 
 function retaliateFrom(a){ // 防衛側 → 攻撃元 への反撃
   makeArc({fromLat:a.toLat,fromLng:a.toLng,toLat:a.fromLat,toLng:a.fromLng,kind:'out',proto:a.proto,ip:a.ip,cc:a.cc,fromName:a.toName,toName:a.fromName,port:a.port});
@@ -483,7 +486,7 @@ const CMDHELP=[
  'nmap &lt;地名&gt;       — 指定地点をスキャン（HQから線を飛ばす）',
  'ping/curl/ssh/hydra/attack &lt;地名&gt; — 同上（演出）',
  'scan              — 全拠点を一斉スキャン',
- 'defend            — 攻撃中の相手へ一斉反撃',
+ 'defend            — 直近5秒に攻撃してきた相手へ一斉反撃',
  'clear             — 画面クリア',
  '※実際にどこかを攻撃するわけではなく、画面内の演出だよ',
 ];
@@ -503,7 +506,7 @@ function runCmd(raw){
       if(j<0){ techo('HQ にできるのは拠点のみ: '+esc(arg)+'   ( ls で一覧 )','err'); break; }
       setHome(j); techo('HQ relocated &rarr; '+esc(TARGETS[j].name),'ok'); break; }
     case 'scan': TARGETS.forEach(t=>playerStrike({lat:t.lat,lng:t.lng,name:t.name},'scan')); techo('scanning all '+TARGETS.length+' sites ...','ok'); break;
-    case 'defend': case 'shield': { let n=0; [...flares.keys()].forEach(name=>{ const c=CITIES.find(x=>x[0]===name); if(c){playerStrike({lat:c[2],lng:c[3],name:c[0]},'counter');n++;} }); techo(n?('counter-strike launched @ '+n+' hostiles'):'no active hostiles','ok'); break; }
+    case 'defend': case 'shield': { let n=0; recentHostiles().forEach(name=>{ const c=CITIES.find(x=>x[0]===name); if(c){playerStrike({lat:c[2],lng:c[3],name:c[0]},'counter');n++;} }); techo(n?('counter-strike launched @ '+n+' hostiles'):'no recent hostiles (last '+RECENT_MS/1000+'s)','ok'); break; }
     case 'nmap': case 'ping': case 'curl': case 'ssh': case 'hydra': case 'attack': case 'strike': {
       const p=findPlace(arg); if(!p){ techo(arg?('place not found: '+esc(arg)):(cmd+': 地名を指定してね  例) '+cmd+' osaka'),'err'); break; }
       playerStrike(p,cmd); techo(cmd+' &rarr; '+esc(p.name)+' ... packet sent','ok'); break; }
@@ -524,7 +527,7 @@ const CH=[
     ? pickOne(['もう自動反撃モード入ってるよ、ぬかりなし！','反撃は作動中。やられたらやり返す、だね。'])
     : (retaliate=true,applyRetal(),savecfg(),'反撃モード、オンにしといたよ！どんどん撃ち返そ。') },
  {q:'どこが危ない？', run:()=> pickOne([`${topName()}からの波が濃いね、要警戒。`,'全方位から来てるけど、落ち着いて見れば捌けるよ。','今のとこ致命傷なし。囮がよく働いてる。']) },
- {q:'一斉反撃して！', run:()=>{ let n=0; [...flares.keys()].forEach(name=>{ const c=CITIES.find(x=>x[0]===name); if(c){playerStrike({lat:c[2],lng:c[3],name:c[0]},'counter');n++;} }); return n?`いっきまー…！ ${n}拠点へ反撃完了。`:'今は狙える相手がいないみたい。'; } },
+ {q:'一斉反撃して！', run:()=>{ let n=0; recentHostiles().forEach(name=>{ const c=CITIES.find(x=>x[0]===name); if(c){playerStrike({lat:c[2],lng:c[3],name:c[0]},'counter');n++;} }); return n?`いっきまー…！ ${n}拠点へ反撃完了。`:'ここ数秒で攻撃してきた相手はいないみたい。'; } },
  {q:'ちょっと落ち着かせて', run:()=> pickOne(['だいじょうぶ、ぜんぶ囮だよ。本丸は無傷。深呼吸しよ。','画面は派手だけど実害ゼロ。コーヒーでも飲も？','このネットワークは私が見てるから、安心して。']) },
  {q:'攻撃元を調べて', run:()=>{ const top=[...counts.entries()].sort((a,b)=>b[1]-a[1]).slice(0,6);
     if(!top.length) return 'まだデータがないよ。少し待ってね。';
