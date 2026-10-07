@@ -340,7 +340,8 @@ function emit(ev){
 window.ATTACK={push:emit, event:randomEvent};
 const secLabel=s=>s>=60?(s/60)+'分':s+'秒';
 function recentHostiles(sec=recentSec){ const cut=performance.now()-sec*1000; // 直近 sec 秒にHQを攻撃してきた送信元
-  return [...hqAttackers.entries()].filter(([,a])=>a.t>cut).map(([name,a])=>({name,lat:a.lat,lng:a.lng})); }
+  const hq=TARGETS[home].name;
+  return [...hqAttackers.entries()].filter(([name,a])=>a.t>cut&&name!==hq).map(([name,a])=>({name,lat:a.lat,lng:a.lng})); }
 function counterAll(sec){ const hs=recentHostiles(sec); hs.forEach(h=>playerStrike(h,'counter')); return hs.length; }
 
 function retaliateFrom(a){ // 防衛側 → 攻撃元 への反撃
@@ -552,7 +553,7 @@ const CMDS={
  status: {usage:'status', desc:'現在の統計'},
  hq:     {alias:['home'], usage:'hq [地名]', desc:'自拠点(HQ)の表示 / 変更'},
  scan:   {usage:'scan [-a | -t | -c CC | -n N] [-w SEC]', desc:'まとめてスキャン（既定: 直近にHQを攻撃してきた相手）', opts:{
-   a:['all',null,'全拠点'], t:['targets',null,'選択中の標的'], c:['country','CC','指定国の送信元都市（例: -c RU）'],
+   a:['all',null,'HQ以外の全拠点（攻撃の有無に関係なく）'], t:['targets',null,'選択中の標的（HQは除く）'], c:['country','CC','指定国の送信元都市（例: -c RU）'],
    n:['top','N','今日の件数上位N都市（1〜20）'], w:['window','SEC','既定の対象時間を今回だけ変更（1〜3600秒）']}},
  defend: {alias:['shield'], usage:'defend [-w SEC]', desc:'直近にHQを攻撃してきた相手へ一斉反撃', opts:{w:['window','SEC','対象時間を今回だけ変更（既定は設定値）']}},
  history:{usage:'history', desc:'入力履歴'},
@@ -591,7 +592,7 @@ function fireAll(list,label){ list.forEach((p,i)=>setTimeout(()=>playerStrike(p,
 function cmdScan(o){
   const modes=['a','t','c','n'].filter(k=>o[k]); if(modes.length>1){ techo('scan: -a / -t / -c / -n は同時に指定できません','err'); return; }
   let list, what;
-  if(o.a){ list=TARGETS.map(asPlace); what='all '+list.length+' sites'; }
+  if(o.a){ list=TARGETS.filter((t,i)=>i!==home).map(asPlace); what='all '+list.length+' sites except HQ'; }
   else if(o.t){ list=(randomMode?TARGETS:[...active].map(i=>TARGETS[i])).map(asPlace); what=list.length+' target site(s)'+(randomMode?' (RANDOM: all)':''); }
   else if(o.c){ const cc=o.c.toUpperCase(); list=CITIES.filter(c=>c[1]===cc).map(c=>({lat:c[2],lng:c[3],name:c[0]}));
     if(!list.length){ techo('scan: 送信元に該当する国コードがありません: '+esc(o.c)+'   ( ls -s で確認 )','err'); return; } what=list.length+' source(s) in '+(CC_NAME[cc]||cc); }
@@ -600,6 +601,9 @@ function cmdScan(o){
     if(!list.length){ techo('scan: まだ送信元の集計がありません','err'); return; } what='top '+list.length+' source(s) today'; }
   else { const sec=o.w?intOpt(o.w,1,3600,'SEC'):recentSec; if(sec===null) return;
     list=recentHostiles(sec); if(!list.length){ techo('scan: no hostiles hit HQ in the last '+sec+'s','sys'); return; } what=list.length+' hostile(s) from last '+sec+'s'; }
+  const hq=hqTarget().name, before=list.length; list=list.filter(p=>p.name!==hq); // HQ自身は対象外
+  if(!list.length){ techo('scan: HQ（'+esc(hq)+'）以外に対象がありません','sys'); return; }
+  if(list.length<before&&!o.a) what+=' (HQ excluded)';
   if(o.w&&(o.a||o.t||o.c||o.n)) techo('scan: -w は既定モード（オプションなし）でのみ有効です','sys');
   fireAll(list,'scan'); techo('scanning '+esc(what)+' ...','ok');
   list.slice(0,8).forEach(p=>techo('  &#9656; '+esc(p.name),'sys')); if(list.length>8) techo('  ... and '+(list.length-8)+' more','sys'); }
@@ -614,6 +618,7 @@ function runCmd(raw){
   if(o.h){ usage(cmd); return; }
   if(CMDS[cmd].probe){
     const p=findPlace(arg); if(!p){ techo(arg?(cmd+': place not found: '+esc(arg)):(cmd+': 地名を指定してね  例) '+cmd+' osaka'),'err'); return; }
+    if(p.name===hqTarget().name){ techo(cmd+': '+esc(p.name)+' はHQ（自拠点）だよ。別の地名を指定してね','err'); return; }
     const n=o.c?intOpt(o.c,1,10,'N'):1; if(n===null) return;
     for(let i=0;i<n;i++) setTimeout(()=>playerStrike(p,cmd),i*250);
     techo(cmd+' &rarr; '+esc(p.name)+(n>1?' x'+n:'')+' ... packet sent','ok'); return; }
