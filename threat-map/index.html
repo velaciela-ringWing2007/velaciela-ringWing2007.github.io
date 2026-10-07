@@ -30,7 +30,7 @@
     color:var(--fg);font-family:"Share Tech Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
     -webkit-font-smoothing:antialiased;overflow-x:hidden;transition:background .4s;}
   .wrap{min-height:100%;display:flex;flex-direction:column;gap:12px;padding-inline:16px;padding-block:14px;margin-inline:auto;
-    max-width:max(1280px, calc((100vh - 120px) * 20 / 11 + 340px));} /* 地図(20:11)の高さが画面に収まる幅まで拡大 */
+    max-width:max(1280px, calc((100vh - 290px) * 20 / 11 + 340px));} /* 地図＋標的バー＋操作バーまでが1画面に収まる幅まで拡大 */
   header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
     border:1px solid var(--panel-brd);background:var(--panel);border-radius:10px;padding:10px 16px;backdrop-filter:blur(2px);}
   .brand{display:flex;flex-direction:column;gap:1px;min-width:0}
@@ -71,7 +71,8 @@
   .rank .bar{grid-column:2/4;height:3px;background:rgba(120,140,160,.14);border-radius:2px;overflow:hidden}
   .rank .bar span{display:block;height:100%;background:linear-gradient(90deg,var(--cyan),var(--panel-brd));box-shadow:0 0 8px var(--glow)}
   .rank .cnt{color:#fff;font-variant-numeric:tabular-nums}
-  .feed{display:flex;flex-direction:column;gap:3px;font-size:11px;line-height:1.5;height:168px;overflow:hidden;mask-image:linear-gradient(180deg,#000 72%,transparent)}
+  .side .panel:last-child{flex:1;min-height:0;display:flex;flex-direction:column}
+  .feed{display:flex;flex-direction:column;gap:3px;font-size:11px;line-height:1.5;flex:1 1 auto;min-height:168px;contain:size;overflow:hidden;mask-image:linear-gradient(180deg,#000 72%,transparent)} /* contain:size で行数が高さを押し広げない */
   .feed .l{display:flex;gap:8px;white-space:nowrap;opacity:0;animation:slideIn .35s ease forwards}
   @keyframes slideIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
   .feed .t{color:var(--fg-dim)}.feed .ip{color:var(--fg)}.feed .ar{color:var(--fg-dim)}.feed .cc{color:var(--fg-dim)}
@@ -123,6 +124,14 @@
   .achoice{display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid var(--panel-brd);padding:10px 14px}
   .achoice button{font-size:11px;padding:6px 11px}
   .achoice button.nav{border-style:dashed;color:var(--fg-dim)}
+  .mpop{position:absolute;z-index:5;min-width:170px;padding:10px;border:1px solid var(--cyan);border-radius:8px;background:var(--bg);box-shadow:0 8px 24px rgba(0,0,0,.6);font-size:12px}
+  .mpop[hidden]{display:none}
+  .mpop-h{color:#fff;letter-spacing:.06em}
+  .mpop-s{color:var(--fg-dim);font-size:10px;letter-spacing:.12em;margin:2px 0 4px}
+  .mpop button{display:block;width:100%;text-align:left;margin-top:6px;font-size:11px;padding:6px 10px}
+  .mpop button:disabled{opacity:.4;cursor:default}
+  .zoomui{position:absolute;left:14px;bottom:12px;z-index:4;font-size:11px;padding:4px 10px;background:var(--panel)}
+  .zoomui[hidden]{display:none}
   /* 見るだけモード：地図＋右パネルを画面いっぱいに。操作系は下から出るドロワーへ */
   .hbtns{display:flex;gap:8px}
   .hbtns button{padding:5px 10px;font-size:11px}
@@ -139,8 +148,6 @@
     :root[data-view="1"] .side{flex:1 1 auto;min-height:0}
   }
   :root[data-view="1"] .side{flex-basis:320px}
-  :root[data-view="1"] .side .panel:last-child{flex:1;min-height:0;display:flex;flex-direction:column}
-  :root[data-view="1"] .feed{flex:1;height:auto}
   :root[data-view="1"] .dock{position:fixed;left:16px;right:16px;bottom:0;z-index:20;max-height:72vh;overflow:auto;padding:12px;
     background:var(--bg);border:1px solid var(--panel-brd);border-bottom:0;border-radius:12px 12px 0 0;box-shadow:0 -12px 40px rgba(0,0,0,.6);
     transform:translateY(105%);visibility:hidden;transition:transform .25s ease,visibility .25s}
@@ -173,6 +180,7 @@
       <canvas id="map"></canvas>
       <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
       <span class="maptag">AMOUNT OF CYBER ATTACKS &nbsp;/&nbsp; FROM ALL &nbsp;&rarr;&nbsp; <b id="tgttag">TO JAPAN</b></span>
+      <button class="zoomui" id="zoomui" hidden title="ズームをリセット（0）"></button>
     </div></div>
     <div class="side">
       <div class="panel"><h2>Attacks Today <small id="rate">+0 /s</small></h2>
@@ -253,22 +261,24 @@ let W=0,H=0,DPR=1, CENTER_LNG=139.76;
 const cssCache={};
 function getCss(v){ if(!(v in cssCache)) cssCache[v]=getComputedStyle(document.documentElement).getPropertyValue(v).trim(); return cssCache[v]; }
 function clearCss(){ for(const k in cssCache) delete cssCache[k]; }
-function proj(lat,lng){ let s=((lng-CENTER_LNG+540)%360)-180; return [ (s+180)/360*W, (90-lat)/180*H ]; }
+let ZOOM=1, FX=.5, FY=.5; // 拡大率と表示中心（地図全体に対する割合 0〜1）
+const zx=bx=>(bx/W-FX)*ZOOM*W+W/2, zy=by=>(by/H-FY)*ZOOM*H+H/2;
+function proj(lat,lng){ let s=((lng-CENTER_LNG+540)%360)-180; return [ zx((s+180)/360*W), zy((90-lat)/180*H) ]; }
 function recenter(){ CENTER_LNG=TARGETS[home].lng; } // 地図の中心は常に自拠点（HQ）
 
 const base=document.createElement('canvas'), bctx=base.getContext('2d');
 function buildBase(){
   base.width=cv.width; base.height=cv.height; bctx.setTransform(DPR,0,0,DPR,0,0); bctx.clearRect(0,0,W,H);
   bctx.lineWidth=1; bctx.strokeStyle=getCss('--grid');
-  for(let i=0;i<=12;i++){ const x=i/12*W; bctx.beginPath();bctx.moveTo(x,0);bctx.lineTo(x,H);bctx.stroke(); }
-  for(let lat=-60;lat<=60;lat+=30){ const y=(90-lat)/180*H; bctx.beginPath();bctx.moveTo(0,y);bctx.lineTo(W,y);bctx.stroke(); }
-  bctx.strokeStyle=getCss('--grid2'); const eq=H/2; bctx.beginPath();bctx.moveTo(0,eq);bctx.lineTo(W,eq);bctx.stroke();
-  bctx.fillStyle=getCss('--land');
-  for(let i=0;i<LAND.length;i++){ const p=proj(LAND[i][1],LAND[i][0]); bctx.fillRect(p[0]-0.6,p[1]-0.6,1.35,1.35); }
+  for(let i=0;i<=12;i++){ const x=zx(i/12*W); bctx.beginPath();bctx.moveTo(x,0);bctx.lineTo(x,H);bctx.stroke(); }
+  for(let lat=-60;lat<=60;lat+=30){ const y=zy((90-lat)/180*H); bctx.beginPath();bctx.moveTo(0,y);bctx.lineTo(W,y);bctx.stroke(); }
+  bctx.strokeStyle=getCss('--grid2'); const eq=zy(H/2); bctx.beginPath();bctx.moveTo(0,eq);bctx.lineTo(W,eq);bctx.stroke();
+  bctx.fillStyle=getCss('--land'); const ds=1.35*Math.min(ZOOM,4)**0.6; // 拡大時は大陸ドットも少し大きく
+  for(let i=0;i<LAND.length;i++){ const p=proj(LAND[i][1],LAND[i][0]); bctx.fillRect(p[0]-ds/2,p[1]-ds/2,ds,ds); }
 }
 function resize(){ const r=cv.getBoundingClientRect(); DPR=Math.min(devicePixelRatio||1,2);
   W=r.width; H=r.height; cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR); ctx.setTransform(DPR,0,0,DPR,0,0); buildBase();
-  arcs.forEach(arcGeom); ripples.length=0; } // 飛行中の弧も新しいサイズに追従
+  arcs.forEach(arcGeom); ripples.length=0; closePop(); } // 飛行中の弧も新しいサイズに追従
 new ResizeObserver(resize).observe(cv);
 
 /* 送信元都市 */
@@ -358,7 +368,7 @@ function logLine(from,to,proto,port,cc,kind){
   const col = kind==='out' ? getCss('--good') : kind==='ops' ? getCss('--ops') : protoColor(proto);
   el.innerHTML=`<span class="t">${ts}</span><span class="ip">${from}</span><span class="ar">${arr}</span>`+
     `<span style="color:${col}">${proto}/${port}</span><span class="cc">[${cc}]</span>`;
-  feed.prepend(el); while(feed.childElementCount>40) feed.lastElementChild.remove();
+  feed.prepend(el); while(feed.childElementCount>80) feed.lastElementChild.remove();
 }
 
 const rankEl=document.getElementById('rank'); let rankAcc=0;
@@ -483,13 +493,14 @@ function buildChips(){ chipsEl.innerHTML=TARGETS.map((t,i)=>
 function syncChips(){ [...chipsEl.querySelectorAll('.chip')].forEach(l=>{ const idx=+l.querySelector('input').dataset.i;
   l.classList.toggle('sel',active.has(idx)); l.querySelector('input').checked=active.has(idx); });
   chipsEl.classList.toggle('lock',randomMode); }
-chipsEl.addEventListener('change',e=>{ const inp=e.target, i=+inp.dataset.i;
-  if(active.has(i)){ if(active.size<=1){ inp.checked=true; return; } active.delete(i); } else active.add(i);
-  syncChips(); recenter(); arcs.length=0; ripples.length=0; applyLabels(); updHQ(); buildBase(); savecfg(); });
+function toggleTarget(i){ // 最後の1つは外せない
+  if(active.has(i)){ if(active.size<=1) return false; active.delete(i); } else active.add(i);
+  syncChips(); recenter(); arcs.length=0; ripples.length=0; applyLabels(); updHQ(); buildBase(); savecfg(); return true; }
+chipsEl.addEventListener('change',e=>{ if(!toggleTarget(+e.target.dataset.i)) e.target.checked=true; });
 
 const hqsel=document.getElementById('hqsel');
 hqsel.innerHTML=TARGETS.map((t,i)=>`<option value="${i}">${t.name}</option>`).join('');
-function setHome(i){ home=i; hqsel.value=String(i); hqAttackers.clear(); updHQ(); recenter(); arcs.length=0; ripples.length=0; buildBase(); savecfg(); }
+function setHome(i){ home=i; hqsel.value=String(i); hqAttackers.clear(); ZOOM=1; FX=FY=.5; updZoomUI(); updHQ(); recenter(); arcs.length=0; ripples.length=0; buildBase(); savecfg(); }
 hqsel.addEventListener('change',()=>setHome(+hqsel.value));
 
 const modeBtn=document.getElementById('mode');
@@ -527,7 +538,8 @@ document.getElementById('dockclose').onclick=()=>{ setDock(false); dockTog.focus
 fsBtn.onclick=()=>{ if(document.fullscreenElement) document.exitFullscreen(); else if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(()=>{}); };
 document.addEventListener('fullscreenchange',()=>fsBtn.classList.toggle('on',!!document.fullscreenElement));
 document.addEventListener('keydown',e=>{ if(e.ctrlKey||e.metaKey||e.altKey||e.target.closest('input,select,textarea')) return;
-  if(e.key==='v'||e.key==='V') viewBtn.click(); else if(e.key==='f'||e.key==='F') fsBtn.click(); else if(e.key==='Escape') setDock(false); });
+  if(e.key==='v'||e.key==='V') viewBtn.click(); else if(e.key==='f'||e.key==='F') fsBtn.click(); else if(e.key==='Escape'){ setDock(false); closePop(); }
+  else if(e.key==='+'||e.key===';') setZoom(ZOOM*1.25); else if(e.key==='-') setZoom(ZOOM/1.25); else if(e.key==='0') resetZoom(); });
 
 /* ════ コマンドコンソール（画面内演出）════ */
 const term=document.getElementById('term'), tin=document.getElementById('tin'), hqlbl=document.getElementById('hqlbl');
@@ -725,6 +737,47 @@ function choose(c,label){ asay(label,'me'); const r=c.run();
   else if(!c.stay){ curMenu=CH; menuStack.length=0; }
   achoice.innerHTML='';
   setTimeout(()=>{ asay(typeof r==='object'?r.say:r,'ai'); renderChoices(); },260); }
+
+/* ════ 地図操作：ホイールで拡大縮小 / ドラッグで移動 / 拠点クリックでポップアップ ════ */
+const mapwrap=cv.parentElement, zoomBtn=document.getElementById('zoomui');
+const pop=document.createElement('div'); pop.className='mpop'; pop.hidden=true; mapwrap.appendChild(pop);
+const TNAMES=new Set(TARGETS.map(t=>t.name));
+const PLACES=[...TARGETS.map((t,i)=>({name:t.name,lat:t.lat,lng:t.lng,ti:i,cc:(CITIES.find(c=>c[0]===t.name)||[])[1]})),
+  ...CITIES.filter(c=>!TNAMES.has(c[0])).map(c=>({name:c[0],lat:c[2],lng:c[3],cc:c[1]}))];
+function evPos(e){ const r=cv.getBoundingClientRect(); return [e.clientX-r.left,e.clientY-r.top]; }
+function hitPlace(x,y){ let best=null,bd=14*14; for(const p of PLACES){ const [px,py]=proj(p.lat,p.lng), d=(px-x)**2+(py-y)**2; if(d<bd){bd=d;best=p;} } return best; }
+function clampView(){ const h=.5/ZOOM; FX=Math.min(1-h,Math.max(h,FX)); FY=Math.min(1-h,Math.max(h,FY)); }
+function updZoomUI(){ zoomBtn.hidden=ZOOM<=1; zoomBtn.innerHTML=ZOOM.toFixed(1)+'x &#8634;'; cv.style.touchAction=ZOOM>1?'none':''; }
+function viewChanged(){ buildBase(); arcs.forEach(arcGeom); ripples.length=0; closePop(); updZoomUI(); }
+function setZoom(z,mx=W/2,my=H/2){ z=Math.min(8,Math.max(1,z)); if(z<1.03) z=1; if(z===ZOOM) return;
+  const ux=(mx-W/2)/(ZOOM*W)+FX, uy=(my-H/2)/(ZOOM*H)+FY; // カーソル下の地点を固定したまま拡大
+  ZOOM=z; FX=ux-(mx-W/2)/(ZOOM*W); FY=uy-(my-H/2)/(ZOOM*H); clampView(); viewChanged(); }
+function resetZoom(){ if(ZOOM===1) return; ZOOM=1; FX=FY=.5; viewChanged(); }
+zoomBtn.onclick=resetZoom;
+cv.addEventListener('wheel',e=>{ const out=e.deltaY>0; if(out&&ZOOM<=1) return; // 等倍で縮小方向ならページスクロールに任せる
+  e.preventDefault(); const [x,y]=evPos(e); setZoom(ZOOM*(out?1/1.25:1.25),x,y); },{passive:false});
+let drag=null;
+cv.addEventListener('pointerdown',e=>{ if(e.button!==0) return; drag={x:e.clientX,y:e.clientY,moved:false}; });
+window.addEventListener('pointermove',e=>{
+  if(drag&&ZOOM>1){ const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
+    if(drag.moved||Math.hypot(dx,dy)>4){ drag.moved=true; FX-=dx/(ZOOM*W); FY-=dy/(ZOOM*H); drag.x=e.clientX; drag.y=e.clientY; clampView(); viewChanged(); cv.style.cursor='grabbing'; } return; }
+  if(e.target===cv) cv.style.cursor=hitPlace(...evPos(e))?'pointer':(ZOOM>1?'grab':''); });
+window.addEventListener('pointerup',()=>{ if(drag&&drag.moved) cv.style.cursor=ZOOM>1?'grab':''; setTimeout(()=>{drag=null;},0); });
+cv.addEventListener('click',e=>{ if(drag&&drag.moved) return; const [x,y]=evPos(e), p=hitPlace(x,y); p?openPop(p,x,y):closePop(); });
+document.addEventListener('pointerdown',e=>{ if(!pop.hidden&&!pop.contains(e.target)&&e.target!==cv) closePop(); });
+function popBtn(html,fn,dis){ const b=document.createElement('button'); b.innerHTML=html; b.disabled=!!dis; b.onclick=()=>{ fn(); closePop(); }; pop.appendChild(b); }
+function openPop(p,x,y){ pop.innerHTML=''; const isHQ=p.ti===home, st=srcStats.get(p.name);
+  const h=document.createElement('div'); h.className='mpop-h'; h.textContent=p.name+(p.cc?' ['+p.cc+']':''); pop.appendChild(h);
+  const sub=document.createElement('div'); sub.className='mpop-s';
+  sub.textContent=isHQ?'HQ（自拠点）':((p.ti!==undefined?'拠点':'送信元')+(st?' · 今日の攻撃 '+st.n.toLocaleString()+'件':'')); pop.appendChild(sub);
+  if(!isHQ){ const a=norm(p.name); ['nmap','ping','curl'].forEach(c=>popBtn('&#9673; '+c,()=>runCmd(c+' '+a))); }
+  if(p.ti!==undefined){
+    if(!isHQ) popBtn('&#9670; HQにする',()=>{ setHome(p.ti); techo('HQ relocated &rarr; '+esc(p.name),'ok'); });
+    const on=active.has(p.ti); popBtn(on?'&minus; 標的から外す':'&#43; 標的に追加',()=>toggleTarget(p.ti),randomMode||(on&&active.size<=1)); }
+  pop.hidden=false; const pw=pop.offsetWidth, ph=pop.offsetHeight;
+  pop.style.left=Math.max(8,Math.min(x+12,mapwrap.clientWidth-pw-8))+'px'; pop.style.top=Math.max(8,Math.min(y+12,mapwrap.clientHeight-ph-8))+'px';
+  const f=pop.querySelector('button:not(:disabled)'); if(f) f.focus({preventScroll:true}); }
+function closePop(){ pop.hidden=true; }
 
 /* ════ 起動 ════ */
 (function(){ try{ const c=JSON.parse(localStorage.getItem(CFG)||'null');
