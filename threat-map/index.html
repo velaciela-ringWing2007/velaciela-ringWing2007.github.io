@@ -30,7 +30,7 @@
     color:var(--fg);font-family:"Share Tech Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
     -webkit-font-smoothing:antialiased;overflow-x:hidden;transition:background .4s;}
   .wrap{min-height:100%;display:flex;flex-direction:column;gap:12px;padding-inline:16px;padding-block:14px;margin-inline:auto;
-    max-width:max(1280px, calc((100vh - 290px) * 20 / 11 + 340px));} /* 地図＋標的バー＋操作バーまでが1画面に収まる幅まで拡大 */
+    max-width:max(1280px, calc((100vh - 330px) * 20 / 11 + 340px));} /* 地図＋標的バー＋操作バーまでが1画面に収まる幅まで拡大 */
   header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
     border:1px solid var(--panel-brd);background:var(--panel);border-radius:10px;padding:10px 16px;backdrop-filter:blur(2px);}
   .brand{display:flex;flex-direction:column;gap:1px;min-width:0}
@@ -81,7 +81,12 @@
   .feed .l.hq .ar{color:var(--target)}
   .targetbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid var(--panel-brd);background:var(--panel);border-radius:10px;padding:9px 14px}
   .tlabel{font-size:11px;letter-spacing:.2em;color:var(--fg-dim);flex:0 0 auto}
-  .chips{display:flex;flex-wrap:wrap;gap:6px;flex:1 1 300px;min-width:0}
+  .tgtsel{flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:8px}
+  .regions{display:flex;flex-wrap:wrap;gap:4px}
+  .regions button{font-size:10px;padding:4px 9px;letter-spacing:.06em}
+  .regions button b{color:var(--target);font-weight:400;margin-left:4px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+  .chip[hidden]{display:none}
   .hqbox{display:flex;align-items:center;gap:8px;flex:0 0 auto}
   .hqbox .tlabel{color:var(--ops)}
   select{font-family:inherit;font-size:12px;letter-spacing:.06em;color:var(--fg);background:rgba(120,160,190,.07);border:1px solid var(--ops);border-radius:7px;padding:5px 8px;cursor:pointer}
@@ -193,7 +198,7 @@
   <div class="dockhead">操作パネル <button id="dockclose">&#9660; 閉じる</button></div>
   <div class="targetbar">
     <div class="hqbox"><label class="tlabel" for="hqsel">&#9670; HQ（自拠点）</label><select id="hqsel"></select></div>
-    <span class="tlabel">TARGETS</span><div class="chips" id="chips"></div>
+    <span class="tlabel">TARGETS</span><div class="tgtsel"><div class="regions" id="regions" role="tablist" aria-label="地域"></div><div class="chips" id="chips"></div></div>
   </div>
   <div class="controls">
     <button id="play" class="on">&#10074;&#10074; PAUSE</button>
@@ -229,25 +234,81 @@ const LAND=[[-72,-54],[-70,-54],[-68,-54],[-74,-52],[-72,-52],[-70,-52],[-60,-52
 const cv=document.getElementById('map'), ctx=cv.getContext('2d');
 const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 
-/* 狙われる拠点 */
-const TARGETS=[
-  {name:'Tokyo',    jp:'JAPAN / TOKYO',   tag:'TO JAPAN',  lat:35.68, lng:139.76},
-  {name:'New York', jp:'USA / NEW YORK',  tag:'TO USA',    lat:40.70, lng:-74.0},
-  {name:'London',   jp:'U.K. / LONDON',   tag:'TO U.K.',   lat:51.50, lng:-0.1},
-  {name:'Moscow',   jp:'RUSSIA / MOSCOW', tag:'TO RUSSIA', lat:55.75, lng:37.6},
-  {name:'Singapore',jp:'SG / SINGAPORE',  tag:'TO SG',     lat:1.35,  lng:103.8},
-  {name:'Sydney',   jp:'AU / SYDNEY',     tag:'TO AU',     lat:-33.9, lng:151.2},
-  {name:'Pyongyang',jp:'DPRK / PYONGYANG',tag:'TO DPRK',   lat:39.02, lng:125.75},
-  {name:'Seoul',    jp:'KOREA / SEOUL',   tag:'TO KOREA',  lat:37.55, lng:126.99},
-  {name:'Shanghai', jp:'CHINA / SHANGHAI',tag:'TO CHINA',  lat:31.23, lng:121.47},
-  {name:'Delhi',    jp:'INDIA / DELHI',   tag:'TO INDIA',  lat:28.61, lng:77.21},
-  {name:'Frankfurt',jp:'EU / FRANKFURT',  tag:'TO EU',     lat:50.11, lng:8.68},
-  {name:'Sapporo',  jp:'JAPAN / SAPPORO', tag:'TO SAPPORO',lat:43.06, lng:141.35},
-  {name:'Yokohama', jp:'JAPAN / YOKOHAMA',tag:'TO YOKOHAMA',lat:35.44,lng:139.64},
-  {name:'Nagoya',   jp:'JAPAN / NAGOYA',  tag:'TO NAGOYA', lat:35.18, lng:136.91},
-  {name:'Osaka',    jp:'JAPAN / OSAKA',   tag:'TO OSAKA',  lat:34.69, lng:135.50},
-  {name:'Fukuoka',  jp:'JAPAN / FUKUOKA', tag:'TO FUKUOKA',lat:33.59, lng:130.40},
+/* ════ 拠点データ ════
+   [名前, 国コード, 緯度, 経度, 地域, 送信元としての重み(0=送信元にならない)]
+   先頭16件は保存済み設定（標的・HQのインデックス）との互換のため順番を固定。全件が標的・HQに選べ、重み>0 は攻撃の送信元にもなる */
+const REGIONS=['日本','東アジア','ロシア','東南アジア','南アジア','中央アジア・中東','ヨーロッパ','アフリカ','北米','南米','オセアニア'];
+const PLACE_DB=[
+  ['Tokyo','JP',35.68,139.76,'日本',1],['New York','US',40.70,-74.0,'北米',5],['London','GB',51.50,-0.1,'ヨーロッパ',4],
+  ['Moscow','RU',55.75,37.6,'ロシア',8],['Singapore','SG',1.35,103.8,'東南アジア',5],['Sydney','AU',-33.9,151.2,'オセアニア',2],
+  ['Pyongyang','KP',39.02,125.75,'東アジア',2],['Seoul','KR',37.55,126.99,'東アジア',4],['Shanghai','CN',31.23,121.47,'東アジア',7],
+  ['Delhi','IN',28.61,77.21,'南アジア',3],['Frankfurt','DE',50.11,8.68,'ヨーロッパ',3],['Sapporo','JP',43.06,141.35,'日本',0],
+  ['Yokohama','JP',35.44,139.64,'日本',0],['Nagoya','JP',35.18,136.91,'日本',0],['Osaka','JP',34.69,135.50,'日本',1],
+  ['Fukuoka','JP',33.59,130.40,'日本',0],
+  // 日本
+  ['Sendai','JP',38.27,140.87,'日本',0],['Hiroshima','JP',34.39,132.46,'日本',0],['Naha','JP',26.21,127.68,'日本',0],
+  // 東アジア
+  ['Beijing','CN',39.9,116.4,'東アジア',8],['Hong Kong','HK',22.3,114.2,'東アジア',9],['Shenzhen','CN',22.54,114.06,'東アジア',4],
+  ['Guangzhou','CN',23.13,113.26,'東アジア',4],['Hangzhou','CN',30.27,120.16,'東アジア',3],['Chengdu','CN',30.66,104.07,'東アジア',2],
+  ['Wuhan','CN',30.59,114.31,'東アジア',2],['Tianjin','CN',39.13,117.2,'東アジア',2],['Harbin','CN',45.8,126.53,'東アジア',1],
+  ['Urumqi','CN',43.83,87.62,'東アジア',1],['Taipei','TW',25.0,121.5,'東アジア',4],['Kaohsiung','TW',22.63,120.3,'東アジア',1],
+  ['Busan','KR',35.18,129.08,'東アジア',1],['Ulaanbaatar','MN',47.92,106.92,'東アジア',1],
+  // ロシア
+  ['St.Petersburg','RU',59.9,30.3,'ロシア',4],['Novosibirsk','RU',55.03,82.92,'ロシア',2],['Yekaterinburg','RU',56.84,60.6,'ロシア',2],
+  ['Kazan','RU',55.79,49.12,'ロシア',1],['Khabarovsk','RU',48.48,135.07,'ロシア',1],['Vladivostok','RU',43.12,131.89,'ロシア',1],
+  // 東南アジア
+  ['Bangkok','TH',13.7,100.5,'東南アジア',2],['Hanoi','VN',21.0,105.8,'東南アジア',3],['Ho Chi Minh City','VN',10.82,106.63,'東南アジア',3],
+  ['Manila','PH',14.6,121.0,'東南アジア',2],['Cebu','PH',10.32,123.89,'東南アジア',1],['Jakarta','ID',-6.2,106.8,'東南アジア',3],
+  ['Surabaya','ID',-7.25,112.75,'東南アジア',1],['Kuala Lumpur','MY',3.14,101.69,'東南アジア',2],['Phnom Penh','KH',11.56,104.92,'東南アジア',1],
+  ['Yangon','MM',16.87,96.2,'東南アジア',1],
+  // 南アジア
+  ['Mumbai','IN',19.0,72.8,'南アジア',4],['Bangalore','IN',12.97,77.59,'南アジア',3],['Chennai','IN',13.08,80.27,'南アジア',2],
+  ['Karachi','PK',24.86,67.0,'南アジア',2],['Lahore','PK',31.55,74.34,'南アジア',1],['Dhaka','BD',23.81,90.41,'南アジア',2],
+  ['Colombo','LK',6.93,79.86,'南アジア',1],
+  // 中央アジア・中東
+  ['Tehran','IR',35.7,51.4,'中央アジア・中東',3],['Mashhad','IR',36.3,59.6,'中央アジア・中東',1],['Baghdad','IQ',33.31,44.36,'中央アジア・中東',1],
+  ['Basra','IQ',30.51,47.78,'中央アジア・中東',1],['Istanbul','TR',41.0,28.9,'中央アジア・中東',3],['Ankara','TR',39.93,32.86,'中央アジア・中東',2],
+  ['Dubai','AE',25.2,55.3,'中央アジア・中東',2],['Riyadh','SA',24.71,46.68,'中央アジア・中東',1],['Tel Aviv','IL',32.09,34.78,'中央アジア・中東',1],
+  ['Almaty','KZ',43.24,76.89,'中央アジア・中東',2],['Astana','KZ',51.17,71.45,'中央アジア・中東',1],['Tashkent','UZ',41.3,69.24,'中央アジア・中東',2],
+  ['Bishkek','KG',42.87,74.59,'中央アジア・中東',1],['Dushanbe','TJ',38.56,68.79,'中央アジア・中東',1],['Ashgabat','TM',37.96,58.33,'中央アジア・中東',1],
+  ['Kabul','AF',34.56,69.21,'中央アジア・中東',1],['Baku','AZ',40.41,49.87,'中央アジア・中東',1],['Tbilisi','GE',41.72,44.79,'中央アジア・中東',1],
+  // ヨーロッパ
+  ['Paris','FR',48.9,2.35,'ヨーロッパ',3],['Berlin','DE',52.5,13.4,'ヨーロッパ',3],['Amsterdam','NL',52.4,4.9,'ヨーロッパ',4],
+  ['Kyiv','UA',50.45,30.5,'ヨーロッパ',3],['Warsaw','PL',52.2,21.0,'ヨーロッパ',2],['Madrid','ES',40.4,-3.7,'ヨーロッパ',2],
+  ['Rome','IT',41.9,12.5,'ヨーロッパ',2],['Bucharest','RO',44.4,26.1,'ヨーロッパ',2],['Stockholm','SE',59.33,18.07,'ヨーロッパ',1],
+  ['Minsk','BY',53.9,27.57,'ヨーロッパ',1],['Sofia','BG',42.7,23.32,'ヨーロッパ',1],['Prague','CZ',50.08,14.44,'ヨーロッパ',1],
+  // アフリカ
+  ['Cairo','EG',30.0,31.2,'アフリカ',2],['Lagos','NG',6.5,3.4,'アフリカ',2],['Abuja','NG',9.06,7.49,'アフリカ',1],
+  ['Johannesburg','ZA',-26.2,28.0,'アフリカ',2],['Cape Town','ZA',-33.92,18.42,'アフリカ',1],['Nairobi','KE',-1.3,36.8,'アフリカ',1],
+  ['Casablanca','MA',33.57,-7.59,'アフリカ',1],['Algiers','DZ',36.75,3.06,'アフリカ',1],['Tunis','TN',36.81,10.18,'アフリカ',1],
+  ['Addis Ababa','ET',9.03,38.74,'アフリカ',1],['Accra','GH',5.6,-0.19,'アフリカ',1],['Kinshasa','CD',-4.44,15.27,'アフリカ',1],
+  ['Dar es Salaam','TZ',-6.79,39.21,'アフリカ',1],['Luanda','AO',-8.84,13.23,'アフリカ',1],
+  // 北米
+  ['Ashburn','US',39.0,-77.5,'北米',7],['Washington','US',38.9,-77.04,'北米',2],['San Francisco','US',37.8,-122.4,'北米',4],
+  ['Dallas','US',32.8,-96.8,'北米',4],['Los Angeles','US',34.1,-118.2,'北米',3],['Chicago','US',41.9,-87.6,'北米',3],
+  ['Seattle','US',47.61,-122.33,'北米',2],['Miami','US',25.76,-80.19,'北米',1],['Toronto','CA',43.7,-79.4,'北米',2],
+  ['Montreal','CA',45.5,-73.57,'北米',2],['Ottawa','CA',45.42,-75.7,'北米',1],['Vancouver','CA',49.28,-123.12,'北米',1],
+  ['Calgary','CA',51.05,-114.07,'北米',1],['Mexico City','MX',19.4,-99.1,'北米',2],
+  // 南米
+  ['Sao Paulo','BR',-23.5,-46.6,'南米',3],['Rio de Janeiro','BR',-22.91,-43.17,'南米',2],['Brasilia','BR',-15.79,-47.88,'南米',1],
+  ['Buenos Aires','AR',-34.6,-58.4,'南米',2],['Montevideo','UY',-34.9,-56.16,'南米',1],['Santiago','CL',-33.45,-70.67,'南米',1],
+  ['Lima','PE',-12.05,-77.04,'南米',1],['Quito','EC',-0.18,-78.47,'南米',1],['Bogota','CO',4.7,-74.1,'南米',1],
+  ['Medellin','CO',6.24,-75.58,'南米',1],['Caracas','VE',10.48,-66.9,'南米',1],
+  // オセアニア
+  ['Melbourne','AU',-37.81,144.96,'オセアニア',1],['Perth','AU',-31.95,115.86,'オセアニア',1],['Auckland','NZ',-36.85,174.76,'オセアニア',1],
 ];
+const CC_NAME={JP:"Japan",US:"United States",GB:"U.K.",RU:"Russia",SG:"Singapore",AU:"Australia",KP:"DPRK",KR:"Korea",CN:"China",
+  IN:"India",DE:"Germany",HK:"Hong Kong",TW:"Taiwan",MN:"Mongolia",TH:"Thailand",VN:"Vietnam",PH:"Philippines",ID:"Indonesia",
+  MY:"Malaysia",KH:"Cambodia",MM:"Myanmar",PK:"Pakistan",BD:"Bangladesh",LK:"Sri Lanka",IR:"Iran",IQ:"Iraq",TR:"Turkey",AE:"UAE",
+  SA:"Saudi Arabia",IL:"Israel",KZ:"Kazakhstan",UZ:"Uzbekistan",KG:"Kyrgyzstan",TJ:"Tajikistan",TM:"Turkmenistan",AF:"Afghanistan",
+  AZ:"Azerbaijan",GE:"Georgia",FR:"France",NL:"Netherlands",UA:"Ukraine",PL:"Poland",ES:"Spain",IT:"Italy",RO:"Romania",SE:"Sweden",
+  BY:"Belarus",BG:"Bulgaria",CZ:"Czechia",EG:"Egypt",NG:"Nigeria",ZA:"S.Africa",KE:"Kenya",MA:"Morocco",DZ:"Algeria",TN:"Tunisia",
+  ET:"Ethiopia",GH:"Ghana",CD:"DR Congo",TZ:"Tanzania",AO:"Angola",CA:"Canada",MX:"Mexico",BR:"Brazil",AR:"Argentina",UY:"Uruguay",
+  CL:"Chile",PE:"Peru",EC:"Ecuador",CO:"Colombia",VE:"Venezuela",NZ:"New Zealand"};
+/* 狙われる拠点（HQ・標的に選べる）: jp=ヘッダー表示 / tag=地図左上の表示 */
+const TARGETS=PLACE_DB.map(([name,cc,lat,lng,region])=>{ const C=(cc==='JP'?'JAPAN':(CC_NAME[cc]||cc).toUpperCase()), N=name.toUpperCase();
+  return {name,cc,lat,lng,region,jp:C+' / '+N,tag:'TO '+(cc==='JP'?N:C)}; });
+TARGETS[0].tag='TO JAPAN';
 const active=new Set([0]);        // 選択中の標的（通常モード）
 let home=0;                       // 自分のいる拠点（HQ）。コマンド攻撃の発射元
 let randomMode=false;             // 全拠点からランダムに狙う
@@ -281,29 +342,8 @@ function resize(){ const r=cv.getBoundingClientRect(); DPR=Math.min(devicePixelR
   arcs.forEach(arcGeom); ripples.length=0; closePop(); } // 飛行中の弧も新しいサイズに追従
 new ResizeObserver(resize).observe(cv);
 
-/* 送信元都市 */
-const CITIES=[
-  ["Hong Kong","HK",22.3,114.2,9],["Beijing","CN",39.9,116.4,8],["Shanghai","CN",31.2,121.5,7],
-  ["Moscow","RU",55.75,37.6,8],["St.Petersburg","RU",59.9,30.3,4],
-  ["Ashburn","US",39.0,-77.5,7],["New York","US",40.7,-74.0,5],["San Francisco","US",37.8,-122.4,4],
-  ["Dallas","US",32.8,-96.8,4],["Los Angeles","US",34.1,-118.2,3],["Chicago","US",41.9,-87.6,3],
-  ["Seoul","KR",37.5,127.0,4],["Taipei","TW",25.0,121.5,4],["Singapore","SG",1.35,103.8,5],
-  ["Mumbai","IN",19.0,72.8,4],["Delhi","IN",28.6,77.2,3],["Jakarta","ID",-6.2,106.8,3],
-  ["Bangkok","TH",13.7,100.5,2],["Hanoi","VN",21.0,105.8,3],["Manila","PH",14.6,121.0,2],
-  ["Tehran","IR",35.7,51.4,3],["Istanbul","TR",41.0,28.9,3],["Dubai","AE",25.2,55.3,2],
-  ["London","GB",51.5,-0.1,4],["Paris","FR",48.9,2.35,3],["Berlin","DE",52.5,13.4,3],
-  ["Amsterdam","NL",52.4,4.9,4],["Kyiv","UA",50.45,30.5,3],["Warsaw","PL",52.2,21.0,2],
-  ["Madrid","ES",40.4,-3.7,2],["Rome","IT",41.9,12.5,2],["Bucharest","RO",44.4,26.1,2],
-  ["Cairo","EG",30.0,31.2,2],["Lagos","NG",6.5,3.4,2],["Johannesburg","ZA",-26.2,28.0,2],
-  ["Nairobi","KE",-1.3,36.8,1],["Toronto","CA",43.7,-79.4,2],["Mexico City","MX",19.4,-99.1,2],
-  ["Sao Paulo","BR",-23.5,-46.6,3],["Buenos Aires","AR",-34.6,-58.4,2],["Bogota","CO",4.7,-74.1,1],
-  ["Sydney","AU",-33.9,151.2,2],
-];
-const CC_NAME={HK:"Hong Kong",CN:"China",RU:"Russia",US:"United States",KR:"Korea",TW:"Taiwan",SG:"Singapore",
-  IN:"India",ID:"Indonesia",TH:"Thailand",VN:"Vietnam",PH:"Philippines",IR:"Iran",TR:"Turkey",AE:"UAE",
-  GB:"U.K.",FR:"France",DE:"Germany",NL:"Netherlands",UA:"Ukraine",PL:"Poland",ES:"Spain",IT:"Italy",
-  RO:"Romania",EG:"Egypt",NG:"Nigeria",ZA:"S.Africa",KE:"Kenya",CA:"Canada",MX:"Mexico",BR:"Brazil",
-  AR:"Argentina",CO:"Colombia",AU:"Australia",JP:"Japan"};
+/* 送信元都市：拠点データのうち重み>0 のもの */
+const CITIES=PLACE_DB.filter(d=>d[5]>0).map(([name,cc,lat,lng,,w])=>[name,cc,lat,lng,w]);
 const POOL=[]; CITIES.forEach(c=>{for(let i=0;i<c[4];i++)POOL.push(c);});
 const PROTOS=[["SSH",22,"#35e0ff","#ff4d4d",7],["Telnet",23,"#ff8a3d","#ff7a2d",6],["HTTP",80,"#ffb454","#ffae3d",6],
   ["HTTPS",443,"#5ef0a8","#ff5a4d",5],["SMB",445,"#ff5ec7","#ff3d8a",4],["RDP",3389,"#ff5a5a","#ff2d2d",4],
@@ -488,10 +528,16 @@ function applyLabels(){ const nm=document.getElementById('tgtname'), tg=document
   if(active.size===1){ const t=TARGETS[[...active][0]]; nm.textContent=t.jp; tg.textContent=t.tag; }
   else { nm.textContent='MULTI ('+active.size+')'; tg.textContent='TO '+active.size+' SITES'; } }
 const chipsEl=document.getElementById('chips');
-function buildChips(){ chipsEl.innerHTML=TARGETS.map((t,i)=>
+const regionsEl=document.getElementById('regions'); let curRegion=null; // 表示中の地域タブ
+function buildChips(){ if(!curRegion) curRegion=TARGETS[home].region;
+  regionsEl.innerHTML=REGIONS.map(r=>`<button type="button" role="tab" data-r="${r}">${r}<b></b></button>`).join('');
+  chipsEl.innerHTML=TARGETS.map((t,i)=>
   `<label class="chip${active.has(i)?' sel':''}"><input type="checkbox" data-i="${i}"${active.has(i)?' checked':''}><span class="cd"></span>${t.name}</label>`).join(''); }
+regionsEl.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; curRegion=b.dataset.r; syncChips(); });
 function syncChips(){ [...chipsEl.querySelectorAll('.chip')].forEach(l=>{ const idx=+l.querySelector('input').dataset.i;
-  l.classList.toggle('sel',active.has(idx)); l.querySelector('input').checked=active.has(idx); });
+  l.classList.toggle('sel',active.has(idx)); l.querySelector('input').checked=active.has(idx); l.hidden=TARGETS[idx].region!==curRegion; });
+  [...regionsEl.children].forEach(b=>{ const r=b.dataset.r, n=[...active].filter(i=>TARGETS[i].region===r).length;
+    b.classList.toggle('on',r===curRegion); b.setAttribute('aria-selected',String(r===curRegion)); b.querySelector('b').textContent=n?String(n):''; });
   chipsEl.classList.toggle('lock',randomMode); }
 function toggleTarget(i){ // 最後の1つは外せない
   if(active.has(i)){ if(active.size<=1) return false; active.delete(i); } else active.add(i);
@@ -499,7 +545,7 @@ function toggleTarget(i){ // 最後の1つは外せない
 chipsEl.addEventListener('change',e=>{ if(!toggleTarget(+e.target.dataset.i)) e.target.checked=true; });
 
 const hqsel=document.getElementById('hqsel');
-hqsel.innerHTML=TARGETS.map((t,i)=>`<option value="${i}">${t.name}</option>`).join('');
+hqsel.innerHTML=REGIONS.map(r=>`<optgroup label="${r}">`+TARGETS.map((t,i)=>[t,i]).filter(([t])=>t.region===r).map(([t,i])=>`<option value="${i}">${t.name}</option>`).join('')+'</optgroup>').join('');
 function setHome(i){ home=i; hqsel.value=String(i); hqAttackers.clear(); ZOOM=1; FX=FY=.5; updZoomUI(); updHQ(); recenter(); arcs.length=0; ripples.length=0; buildBase(); savecfg(); }
 hqsel.addEventListener('change',()=>setHome(+hqsel.value));
 
@@ -600,7 +646,7 @@ function helpAll(){
   techo('Tab: 補完　↑↓: 履歴　&lt;コマンド&gt; -h: 詳しい使い方','sys');
   techo('※実際にどこかを攻撃するわけではなく、画面内の演出だよ','sys'); }
 const asPlace=t=>({lat:t.lat,lng:t.lng,name:t.name});
-function fireAll(list,label){ list.forEach((p,i)=>setTimeout(()=>playerStrike(p,label),i*60)); return list.length; }
+function fireAll(list,label){ const gap=Math.min(60,3000/Math.max(1,list.length)); list.forEach((p,i)=>setTimeout(()=>playerStrike(p,label),i*gap)); return list.length; }
 function cmdScan(o){
   const modes=['a','t','c','n'].filter(k=>o[k]); if(modes.length>1){ techo('scan: -a / -t / -c / -n は同時に指定できません','err'); return; }
   let list, what;
@@ -640,7 +686,7 @@ function runCmd(raw){
       if(o.s){ const top=[...srcStats.entries()].sort((a,b)=>b[1].n-a[1].n).slice(0,12);
         if(!top.length){ techo('まだ送信元の集計がありません','sys'); break; }
         top.forEach(([name,st])=>techo((name+' ['+st.cc+']').padEnd(22)+st.n.toLocaleString(),'sys')); }
-      else techo(TARGETS.map(t=>t.name).join('   '),'sys');
+      else REGIONS.forEach(r=>techo('['+r+'] '+TARGETS.filter(t=>t.region===r).map(t=>esc(t.name)).join('  '),'sys'));
       break;
     case 'status': techo('ATTACKS TODAY: '+total.toLocaleString()+'　/　HQ HITS: '+hqHits.toLocaleString()+'　/　TOP SOURCE: '+topName()+'　/　RETALIATE: '+(retaliate?'ON':'OFF')+'　/　WINDOW: '+recentSec+'s','ok'); break;
     case 'clear': term.innerHTML=''; break;
@@ -690,10 +736,8 @@ const CH=[
  {q:'攻撃元を調べて', run:()=>{ const top=[...counts.entries()].sort((a,b)=>b[1]-a[1]).slice(0,6);
     if(!top.length) return 'まだデータがないよ。少し待ってね。';
     return {say:'どの国を調べる？', sub:top.map(([cc,n])=>({q:`${CC_NAME[cc]||cc}（${n.toLocaleString()}件）`, run:()=>countryReport(cc)}))}; } },
- {q:'HQを移動したい', run:()=>({say:`いまのHQは${hqTarget().name}だよ。どっち方面に移る？`, sub:[
-    {q:'国内', run:()=>({say:'国内のどこにする？', sub:hqMoves(t=>t.jp.startsWith('JAPAN'))})},
-    {q:'海外', run:()=>({say:'海外のどこにする？', sub:hqMoves(t=>!t.jp.startsWith('JAPAN'))})},
-  ]}) },
+ {q:'HQを移動したい', run:()=>({say:`いまのHQは${hqTarget().name}だよ。どの地域に移る？`,
+    sub:REGIONS.map(r=>({q:r, run:()=>({say:r+'のどこにする？', sub:hqMoves(t=>t.region===r)})}))}) },
  {q:'設定を変えたい', run:()=>({say:'どれを変える？', sub:SETTINGS})},
  {q:'雑談しよ', run:()=>({say:'いいよ、なに話す？', sub:CHAT})},
 ];
