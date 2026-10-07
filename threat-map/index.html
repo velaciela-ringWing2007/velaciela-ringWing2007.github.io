@@ -119,6 +119,7 @@
   .bub.me{align-self:flex-end;background:rgba(120,160,190,.1);border:1px solid var(--panel-brd);border-bottom-right-radius:3px;color:var(--fg)}
   .achoice{display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid var(--panel-brd);padding:10px 14px}
   .achoice button{font-size:11px;padding:6px 11px}
+  .achoice button.nav{border-style:dashed;color:var(--fg-dim)}
   @media(prefers-reduced-motion:reduce){.feed .l{animation:none;opacity:1}.live .dot{animation:none}body{transition:none}}
 </style>
 </head>
@@ -274,7 +275,7 @@ function randomEvent(){
 }
 
 /* ════ 状態 ════ */
-let total=0; const counts=new Map(); const arcs=[]; const ripples=[]; const flares=new Map(); const locks=[]; // locks: コマンド攻撃の着弾マーカー
+let total=0; const counts=new Map(); const arcs=[]; const ripples=[]; const flares=new Map(); const srcStats=new Map(); let hqHits=0; const locks=[]; // locks: コマンド攻撃の着弾マーカー
 let paused=false, speed=1, spawnAcc=0; let rateWin=[], rateShown=0;
 
 function makeArc(o){ // o:{fromLat,fromLng,toLat,toLng,kind,proto,ip,cc,fromName,toName}
@@ -288,6 +289,9 @@ function emit(ev){
   total++; counts.set(ev.cc,(counts.get(ev.cc)||0)+1); rateWin.push(performance.now());
   makeArc({fromLat:ev.srcLat,fromLng:ev.srcLng,toLat:T.lat,toLng:T.lng,kind:'in',proto:ev.proto,ip:ev.ip,cc:ev.cc,fromName:ev.label,toName:T.name,port:ev.port});
   flares.set(ev.label,performance.now()+600); logLine(ev.ip,T.name,ev.proto,ev.port,ev.cc,T===TARGETS[home]?'hq':'in');
+  const st=srcStats.get(ev.label)||{cc:ev.cc,n:0,protos:{}}; // ククリの分析用（送信元都市ごと）
+  st.n++; st.protos[ev.proto]=(st.protos[ev.proto]||0)+1; srcStats.set(ev.label,st);
+  if(T===TARGETS[home]) hqHits++;
 }
 window.ATTACK={push:emit, event:randomEvent};
 
@@ -412,7 +416,7 @@ let curDay=todayStr();
 function save(){ try{ localStorage.setItem(KEY,JSON.stringify({date:curDay,total,counts:[...counts.entries()]})); }catch(e){} }
 function load(){ try{ const s=JSON.parse(localStorage.getItem(KEY)||'null');
   if(s&&s.date===todayStr()){ total=s.total||0; (s.counts||[]).forEach(([k,v])=>counts.set(k,v)); return true; } }catch(e){} return false; }
-function resetDay(){ curDay=todayStr(); total=0; counts.clear(); arcs.length=0; ripples.length=0; rateWin=[]; feed.innerHTML=''; drawRank(); save(); }
+function resetDay(){ curDay=todayStr(); total=0; counts.clear(); srcStats.clear(); hqHits=0; arcs.length=0; ripples.length=0; rateWin=[]; feed.innerHTML=''; drawRank(); save(); }
 const daylbl=document.getElementById('daylbl');
 function tick(){ const d=new Date();
   document.getElementById('clock').textContent=`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
@@ -524,9 +528,55 @@ const CH=[
  {q:'どこが危ない？', run:()=> pickOne([`${topName()}からの波が濃いね、要警戒。`,'全方位から来てるけど、落ち着いて見れば捌けるよ。','今のとこ致命傷なし。囮がよく働いてる。']) },
  {q:'一斉反撃して！', run:()=>{ let n=0; [...flares.keys()].forEach(name=>{ const c=CITIES.find(x=>x[0]===name); if(c){playerStrike({lat:c[2],lng:c[3],name:c[0]},'counter');n++;} }); return n?`いっきまー…！ ${n}拠点へ反撃完了。`:'今は狙える相手がいないみたい。'; } },
  {q:'ちょっと落ち着かせて', run:()=> pickOne(['だいじょうぶ、ぜんぶ囮だよ。本丸は無傷。深呼吸しよ。','画面は派手だけど実害ゼロ。コーヒーでも飲も？','このネットワークは私が見てるから、安心して。']) },
+ {q:'攻撃元を調べて', run:()=>{ const top=[...counts.entries()].sort((a,b)=>b[1]-a[1]).slice(0,6);
+    if(!top.length) return 'まだデータがないよ。少し待ってね。';
+    return {say:'どの国を調べる？', sub:top.map(([cc,n])=>({q:`${CC_NAME[cc]||cc}（${n.toLocaleString()}件）`, run:()=>countryReport(cc)}))}; } },
+ {q:'HQを移動したい', run:()=>({say:`いまのHQは${hqTarget().name}だよ。どっち方面に移る？`, sub:[
+    {q:'国内', run:()=>({say:'国内のどこにする？', sub:hqMoves(t=>t.jp.startsWith('JAPAN'))})},
+    {q:'海外', run:()=>({say:'海外のどこにする？', sub:hqMoves(t=>!t.jp.startsWith('JAPAN'))})},
+  ]}) },
+ {q:'設定を変えたい', run:()=>({say:'どれを変える？', sub:SETTINGS})},
+ {q:'雑談しよ', run:()=>({say:'いいよ、なに話す？', sub:CHAT})},
 ];
-function renderChoices(){ achoice.innerHTML=''; CH.forEach(c=>{ const b=document.createElement('button'); b.textContent=c.q;
-  b.onclick=()=>{ asay(c.q,'me'); const r=c.run(); setTimeout(()=>asay(r,'ai'),260); }; achoice.appendChild(b); }); }
+function countryReport(cc){ // 国ごとの件数・多い通信・主な都市
+  const cities=[...srcStats.entries()].filter(([,s])=>s.cc===cc).sort((a,b)=>b[1].n-a[1].n);
+  const name=CC_NAME[cc]||cc, n=counts.get(cc)||0;
+  if(!cities.length) return `${name}からは今日${n.toLocaleString()}件。詳しい内訳はページを開き直す前のぶんだから、まだ集計中だよ。`;
+  const pr={}; cities.forEach(([,s])=>{ for(const k in s.protos) pr[k]=(pr[k]||0)+s.protos[k]; });
+  const protos=Object.entries(pr).sort((a,b)=>b[1]-a[1]).slice(0,2).map(x=>x[0]).join(' と ');
+  return `${name}からは今日${n.toLocaleString()}件。多いのは ${protos}、主な発信地は ${cities.slice(0,3).map(x=>x[0]).join(' / ')} だね。`;
+}
+function hqMoves(filter){ return TARGETS.map((t,i)=>[t,i]).filter(([t])=>filter(t)).map(([t,i])=>({q:t.name, run:()=>{
+  if(i===home) return `もう${t.name}にいるよ！`;
+  setHome(i); techo('HQ relocated &rarr; '+esc(t.name),'ok'); return pickOne([`HQを${t.name}に移したよ。新しい拠点、いい眺め！`,`${t.name}へ移動完了。地図の菱形マーカーも動いたよ。`]); }})); }
+const speedEl=document.getElementById('speed');
+function setSpeed(v){ speedEl.value=String(Math.min(4,Math.max(0.25,v))); speedEl.dispatchEvent(new Event('input')); return spd.textContent; }
+const SETTINGS=[
+ {q:()=>'報復: '+(retaliate?'ON → OFF':'OFF → ON'), run:()=>{ retaliate=!retaliate; applyRetal(); savecfg(); return retaliate?'報復モード、オンにしたよ。':'報復モード、オフにしたよ。見守りに徹するね。'; }, stay:true},
+ {q:()=>'配色: '+(mode==='max'?'攻殻MAX → 標準':'標準 → 攻殻MAX'), run:()=>{ mode=mode==='max'?'std':'max'; applyMode(); savecfg(); return mode==='max'?'攻殻MAX、赤く染めたよ。':'標準の配色に戻したよ。'; }, stay:true},
+ {q:()=>'RANDOM: '+(randomMode?'ON → OFF':'OFF → ON'), run:()=>{ randomMode=!randomMode; applyRandom(); savecfg(); return randomMode?'全拠点ランダムに切り替えたよ。':'選んだ標的だけに戻したよ。'; }, stay:true},
+ {q:()=>paused?'再開して':'一時停止して', run:()=>{ setPaused(!paused); return paused?'いったん止めたよ。':'再開したよ。'; }, stay:true},
+ {q:'速度アップ', run:()=>`速度 ${setSpeed(speed*2)} にしたよ。`, stay:true},
+ {q:'速度ダウン', run:()=>`速度 ${setSpeed(speed/2)} にしたよ。`, stay:true},
+];
+const CHAT=[
+ {q:'ククリって何者？', run:()=>pickOne(['この端末に住んでる防衛支援AIだよ。中身は選択肢式の人工無能だけどね。','あなた専属のオペレーター。名前の由来はナイショ！'])},
+ {q:'今日の調子は？', run:()=>pickOne([`絶好調！ もう${total.toLocaleString()}件さばいたよ。`,`HQへの着弾は${hqHits.toLocaleString()}件。まだまだいける！`,'ちょっと回線が騒がしいけど元気だよ。'])},
+ {q:'疲れた…', run:()=>pickOne(['おつかれさま。監視は任せて、少し休も？','画面から目を離して、遠くを見てみて。目にいいよ。','がんばりすぎ注意！ お茶でもどうぞ。'])},
+ {q:'おすすめのコマンドは？', run:()=>pickOne(['`scan` で全拠点を一斉スキャンすると、地図がにぎやかになるよ。','`hq <地名>` で自拠点を移せるよ。たまには引っ越しもいいよね。','`status` で今日の統計がすぐ見られるよ。'])},
+];
+/* メニュー表示：menuStack に親メニューを積んでサブメニューへ潜る */
+let curMenu=CH; const menuStack=[];
+function navBtn(label,fn){ const b=document.createElement('button'); b.className='nav'; b.textContent=label; b.onclick=fn; achoice.appendChild(b); }
+function renderChoices(){ achoice.innerHTML='';
+  curMenu.forEach(c=>{ const b=document.createElement('button'); b.textContent=typeof c.q==='function'?c.q():c.q; b.onclick=()=>choose(c,b.textContent); achoice.appendChild(b); });
+  if(menuStack.length){ navBtn('↩ もどる',()=>{ curMenu=menuStack.pop(); renderChoices(); });
+    if(menuStack.length>1) navBtn('⌂ メニュー',()=>{ curMenu=CH; menuStack.length=0; renderChoices(); }); } }
+function choose(c,label){ asay(label,'me'); const r=c.run();
+  if(r&&typeof r==='object'&&r.sub){ menuStack.push(curMenu); curMenu=r.sub; }
+  else if(!c.stay){ curMenu=CH; menuStack.length=0; }
+  achoice.innerHTML='';
+  setTimeout(()=>{ asay(typeof r==='object'?r.say:r,'ai'); renderChoices(); },260); }
 
 /* ════ 起動 ════ */
 (function(){ try{ const c=JSON.parse(localStorage.getItem(CFG)||'null');
