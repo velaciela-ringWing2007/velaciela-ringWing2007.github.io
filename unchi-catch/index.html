@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>うんちキャッチ</title>
+<style>
+:root{
+  --bg:#171a28;--panel:#262a3f;--fg:#f3f0e6;--sub:#a9a6b8;
+  --accent:#ffcc4d;--good:#6bdc8b;--bad:#ff6b6b;--stage:#20243a;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);
+  font-family:system-ui,"Hiragino Sans","Noto Sans JP",sans-serif;
+  overscroll-behavior:none;touch-action:none;-webkit-user-select:none;user-select:none;
+  -webkit-tap-highlight-color:transparent;overflow:hidden}
+#wrap{display:flex;flex-direction:column;align-items:center;height:100%;padding:8px 8px 10px;gap:8px}
+#hud{display:flex;gap:6px;width:100%;max-width:480px}
+.box{background:var(--panel);border-radius:10px;padding:4px 6px;text-align:center;flex:1;font-size:12px;color:var(--sub)}
+.box b{display:block;font-size:18px;color:var(--fg);font-variant-numeric:tabular-nums}
+.box.on{outline:2px solid var(--accent)}
+#stage{position:relative;border-radius:14px;overflow:hidden;background:linear-gradient(#1c2036,#2a2f4a)}
+canvas{display:block;width:100%;height:100%}
+#ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:10px;padding:16px;text-align:center;background:rgba(15,17,28,.86)}
+#ov.hide{display:none}
+#ov h1{margin:0;font-size:26px}
+#ov p{margin:0;font-size:13px;line-height:1.6;color:var(--sub)}
+#ov .rules{font-size:13px;line-height:1.7;text-align:left;background:var(--panel);padding:8px 12px;border-radius:10px}
+#ov .big{font-size:40px;font-weight:700;color:var(--accent)}
+.btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+button{font:inherit;border:0;border-radius:10px;padding:10px 16px;background:var(--panel);color:var(--fg);cursor:pointer}
+button.pri{background:var(--accent);color:#2a2000;font-weight:700}
+button small{display:block;font-size:11px;opacity:.75}
+#ctl{display:flex;gap:8px;width:100%;max-width:480px}
+#ctl button{flex:1;font-size:26px;padding:10px 0;touch-action:none}
+#ctl button.sw{flex:1.4;font-size:18px}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="hud">
+    <div class="box" id="bRice">🍚 飯pt<b id="vRice">0</b></div>
+    <div class="box" id="bBroom">🧹 箒pt<b id="vBroom">0</b></div>
+    <div class="box">合計<b id="vTotal">0</b></div>
+    <div class="box">⏱<b id="vTime">60</b></div>
+  </div>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="ov"></div>
+  </div>
+  <div id="ctl">
+    <button id="cL" aria-label="左">◀</button>
+    <button id="cS" class="sw" aria-label="持ち替え">🍚⇄🧹</button>
+    <button id="cR" aria-label="右">▶</button>
+  </div>
+</div>
+<script>
+(() => {
+// ===== 設定（ここをいじればバランス調整できるよ） =====
+const PT = { catch: 30, rice: -60, body: -80, ricePerSec: 10 };
+const DIFF = {
+  easy:   { label: '初級', mice: 1, interval: 1.5, speed: [110, 160], time: 60 },
+  normal: { label: '中級', mice: 2, interval: 1.2, speed: [140, 210], time: 60 },
+  hard:   { label: '上級', mice: 3, interval: 0.85, speed: [170, 270], time: 60 },
+};
+const W = 360, H = 560, GROUND = H - 44, PLAYER_SPEED = 260;
+const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const stage = document.getElementById('stage'), ov = document.getElementById('ov');
+const $ = id => document.getElementById(id);
+let dpr = 1;
+
+function resize() {
+  const hud = $('hud').offsetHeight, ctl = $('ctl').offsetHeight;
+  const availW = Math.min(window.innerWidth - 16, 480);
+  const availH = window.innerHeight - hud - ctl - 34;
+  let w = availW, h = w * H / W;
+  if (h > availH) { h = availH; w = h * W / H; }
+  stage.style.width = w + 'px'; stage.style.height = h + 'px';
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = W * dpr; cv.height = H * dpr;
+}
+window.addEventListener('resize', resize);
+
+// ===== ハイスコア（保存できない環境でも動くように try/catch） =====
+function loadHi() { try { return JSON.parse(localStorage.getItem('unchi_hi') || '{}'); } catch (e) { return {}; } }
+function saveHi(o) { try { localStorage.setItem('unchi_hi', JSON.stringify(o)); } catch (e) {} }
+
+// ===== 状態 =====
+let state = 'menu', game = null;
+const input = { left: false, right: false };
+const rand = (a, b) => a + Math.random() * (b - a);
+
+function newGame(key) {
+  const d = DIFF[key];
+  game = {
+    key, d, time: d.time, t: 0, rice: 0, broom: 0, mode: 'rice', px: W / 2,
+    mice: [], poops: [], fx: [], splats: [], shake: 0, hurt: 0, sweep: 0,
+    stats: { catch: 0, rice: 0, body: 0, miss: 0 },
+  };
+  for (let i = 0; i < d.mice; i++) {
+    game.mice.push({
+      phase: Math.random() * 6.28, freq: rand(0.55, 1.0), baseY: 52 + i * 46,
+      timer: rand(0.4, 1.0) + i * 0.3, x: W / 2, y: 52 + i * 46, trail: [], trailT: 0,
+    });
+  }
+  state = 'play';
+  ov.classList.add('hide');
+}
+
+function toggleMode() {
+  if (state !== 'play') return;
+  game.mode = game.mode === 'rice' ? 'broom' : 'rice';
+  addFx(game.mode === 'rice' ? '🍚' : '🧹', playerItemX(), H - 130, '#fff', 22);
+}
+
+const playerItemX = () => game.px - 28;
+const playerBodyX = () => game.px + 14;
+const ITEM_Y = H - 96, BODY_Y = H - 70;
+
+function addFx(text, x, y, color, size = 20) {
+  game.fx.push({ text, x, y, color, size, life: 0.9 });
+}
+
+// ===== 更新 =====
+function update(dt) {
+  const g = game;
+  g.t += dt;
+  g.time -= dt;
+  if (g.time <= 0) { g.time = 0; endGame(); return; }
+
+  // プレイヤー移動
+  const dir = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+  g.px = Math.max(52, Math.min(W - 34, g.px + dir * PLAYER_SPEED * dt));
+
+  // 飯ポイント：🍚モードの時だけ貯まる
+  if (g.mode === 'rice') g.rice += PT.ricePerSec * dt;
+
+  // ネズミ（くるくる➰しながら左右移動）
+  for (const m of g.mice) {
+    const s = g.t * m.freq + m.phase;
+    m.x = W / 2 + (W / 2 - 40) * Math.sin(s) + 16 * Math.cos(g.t * 4 + m.phase);
+    m.y = m.baseY + 14 * Math.sin(g.t * 4 + m.phase);
+    m.trailT -= dt;
+    if (m.trailT <= 0) { m.trail.push({ x: m.x, y: m.y, life: 0.7 }); m.trailT = 0.14; }
+    for (const p of m.trail) p.life -= dt;
+    m.trail = m.trail.filter(p => p.life > 0);
+    m.timer -= dt;
+    if (m.timer <= 0) {
+      g.poops.push({ x: m.x, y: m.y + 16, vy: rand(...g.d.speed), rot: rand(-0.3, 0.3), spin: rand(-3, 3) });
+      m.timer = g.d.interval * rand(0.6, 1.4);
+    }
+  }
+
+  // うんち落下＆当たり判定
+  const ix = playerItemX(), bx = playerBodyX();
+  for (const p of g.poops) {
+    p.vy += 40 * dt;
+    p.y += p.vy * dt;
+    p.rot += p.spin * dt;
+    if (p.dead) continue;
+    // 手に持ってる物（🍚 or 🧹）に当たった
+    if (Math.abs(p.x - ix) < 24 && p.y > ITEM_Y - 18 && p.y < ITEM_Y + 12) {
+      p.dead = true;
+      if (g.mode === 'broom') {
+        g.broom += PT.catch; g.stats.catch++; g.sweep = 0.25;
+        addFx('+' + PT.catch, ix, ITEM_Y - 30, '#6bdc8b');
+      } else {
+        g.rice += PT.rice; g.stats.rice++; g.shake = 0.2;
+        addFx(PT.rice + ' ご飯が…', ix, ITEM_Y - 30, '#ff6b6b');
+      }
+      continue;
+    }
+    // 本体（🐧）直撃
+    if (Math.abs(p.x - bx) < 20 && p.y > BODY_Y - 24 && p.y < BODY_Y + 20) {
+      p.dead = true;
+      g.broom += PT.body; g.stats.body++; g.shake = 0.35; g.hurt = 0.6;
+      addFx(PT.body + ' 直撃!!', bx, BODY_Y - 40, '#ff6b6b', 22);
+      continue;
+    }
+    // 地面に落ちた（ペナルティなし）
+    if (p.y > GROUND) {
+      p.dead = true; g.stats.miss++;
+      g.splats.push({ x: p.x, life: 1.2 });
+    }
+  }
+  g.poops = g.poops.filter(p => !p.dead && p.y < H + 40);
+
+  for (const f of g.fx) { f.life -= dt; f.y -= 40 * dt; }
+  g.fx = g.fx.filter(f => f.life > 0);
+  for (const s of g.splats) s.life -= dt;
+  g.splats = g.splats.filter(s => s.life > 0);
+  g.shake = Math.max(0, g.shake - dt);
+  g.hurt = Math.max(0, g.hurt - dt);
+  g.sweep = Math.max(0, g.sweep - dt);
+}
+
+// ===== 描画 =====
+function emoji(ch, x, y, size, alpha = 1, rot = 0) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(x, y); if (rot) ctx.rotate(rot);
+  ctx.font = `${size}px ${EMOJI_FONT}`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(ch, 0, 0);
+  ctx.restore();
+}
+
+function draw() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  // 星
+  ctx.fillStyle = 'rgba(255,255,255,.25)';
+  for (let i = 0; i < 30; i++) ctx.fillRect((i * 97) % W, (i * 53) % (H - 200), 1.5, 1.5);
+  if (!game) return;
+  const g = game;
+  ctx.save();
+  if (g.shake > 0) ctx.translate(rand(-5, 5), rand(-5, 5));
+
+  // 地面
+  ctx.fillStyle = '#3a3f5c';
+  ctx.fillRect(0, GROUND + 14, W, H - GROUND);
+  for (const s of g.splats) emoji('💩', s.x, GROUND + 8, 18, Math.min(1, s.life) * 0.7);
+
+  // ネズミと軌跡
+  for (const m of g.mice) {
+    for (const p of m.trail) emoji('➰', p.x, p.y, 14, p.life * 0.6);
+    emoji('🐁', m.x, m.y, 30);
+  }
+  // うんち
+  for (const p of g.poops) emoji('💩', p.x, p.y, 26, 1, p.rot);
+
+  // プレイヤー
+  const ix = playerItemX(), bx = playerBodyX();
+  if (g.mode === 'broom') {
+    const r = g.sweep > 0 ? Math.sin(g.sweep * 40) * 0.5 : -0.2;
+    emoji('🧹', ix, ITEM_Y, 34, 1, r);
+  } else {
+    emoji('🍚', ix, ITEM_Y, 32);
+    // 湯気
+    const a = 0.25 + 0.15 * Math.sin(g.t * 5);
+    ctx.strokeStyle = `rgba(255,255,255,${a})`; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(ix - 4, ITEM_Y - 20);
+    ctx.quadraticCurveTo(ix + 4, ITEM_Y - 28, ix - 2, ITEM_Y - 36); ctx.stroke();
+  }
+  const blink = g.hurt > 0 && Math.floor(g.hurt * 20) % 2 === 0;
+  emoji('🐧', bx, BODY_Y, 44, blink ? 0.3 : 1);
+
+  // エフェクト文字
+  for (const f of g.fx) {
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, f.life * 1.5);
+    ctx.font = `bold ${f.size}px system-ui, sans-serif`;
+    ctx.textAlign = 'center'; ctx.fillStyle = f.color;
+    ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = 3;
+    ctx.strokeText(f.text, f.x, f.y); ctx.fillText(f.text, f.x, f.y);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function updateHud() {
+  const g = game;
+  const rice = g ? Math.floor(g.rice) : 0, broom = g ? g.broom : 0;
+  $('vRice').textContent = rice;
+  $('vBroom').textContent = broom;
+  $('vTotal').textContent = rice + broom;
+  $('vTime').textContent = g ? Math.ceil(g.time) : 60;
+  $('bRice').classList.toggle('on', !!g && g.mode === 'rice');
+  $('bBroom').classList.toggle('on', !!g && g.mode === 'broom');
+}
+
+// ===== 画面 =====
+function showMenu() {
+  state = 'menu';
+  const hi = loadHi();
+  ov.innerHTML = `
+    <h1>🐁💩 うんちキャッチ 🧹🐧</h1>
+    <div class="rules">
+      ◀ ▶ / A D / ← → ：移動<br>
+      持ち替えボタン / Space / ↑：🍚⇄🧹<br>
+      🍚の間だけ飯ptが貯まる（${PT.ricePerSec}/秒）<br>
+      🧹で💩キャッチ：<b style="color:var(--good)">+${PT.catch}</b><br>
+      🍚に💩：<b style="color:var(--bad)">${PT.rice}</b>　🐧に直撃：<b style="color:var(--bad)">${PT.body}</b>
+    </div>
+    <div class="btns">
+      ${Object.entries(DIFF).map(([k, d]) =>
+        `<button class="${k === 'easy' ? 'pri' : ''}" data-k="${k}">${d.label}<small>HI ${hi[k] ?? '-'}</small></button>`
+      ).join('')}
+    </div>`;
+  ov.classList.remove('hide');
+  ov.querySelectorAll('button[data-k]').forEach(b => b.onclick = () => newGame(b.dataset.k));
+}
+
+function endGame() {
+  state = 'result';
+  const g = game, rice = Math.floor(g.rice), total = rice + g.broom;
+  const hi = loadHi(), best = hi[g.key];
+  const isNew = best === undefined || total > best;
+  if (isNew) { hi[g.key] = total; saveHi(hi); }
+  updateHud();
+  ov.innerHTML = `
+    <p>${g.d.label} 結果</p>
+    <div class="big">${total}</div>
+    ${isNew ? '<p style="color:var(--accent)">✨ ハイスコア更新！ ✨</p>' : `<p>HI ${best}</p>`}
+    <div class="rules">
+      🍚 飯pt：${rice}<br>🧹 箒pt：${g.broom}<br>
+      キャッチ ${g.stats.catch}回 ／ ご飯被弾 ${g.stats.rice}回<br>
+      直撃 ${g.stats.body}回 ／ 地面 ${g.stats.miss}回
+    </div>
+    <div class="btns">
+      <button class="pri" id="again">もう一回</button>
+      <button id="menu">難易度選択</button>
+    </div>`;
+  ov.classList.remove('hide');
+  $('again').onclick = () => newGame(g.key);
+  $('menu').onclick = showMenu;
+}
+
+function pause() {
+  if (state !== 'play') return;
+  state = 'pause';
+  ov.innerHTML = `<h1>一時停止中</h1><div class="btns"><button class="pri" id="resume">つづける</button><button id="quit">やめる</button></div>`;
+  ov.classList.remove('hide');
+  $('resume').onclick = () => { state = 'play'; ov.classList.add('hide'); };
+  $('quit').onclick = showMenu;
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+
+// ===== 入力 =====
+window.addEventListener('keydown', e => {
+  const k = e.key;
+  if (k === 'ArrowLeft' || k === 'a' || k === 'A') input.left = true;
+  else if (k === 'ArrowRight' || k === 'd' || k === 'D') input.right = true;
+  else if ((k === ' ' || k === 'ArrowUp' || k === 'w' || k === 'W') && !e.repeat) toggleMode();
+  else if (k === 'Escape' || k === 'p' || k === 'P') pause();
+  else return;
+  e.preventDefault();
+});
+window.addEventListener('keyup', e => {
+  const k = e.key;
+  if (k === 'ArrowLeft' || k === 'a' || k === 'A') input.left = false;
+  if (k === 'ArrowRight' || k === 'd' || k === 'D') input.right = false;
+});
+function hold(el, key) {
+  const on = e => { e.preventDefault(); input[key] = true; };
+  const off = e => { e.preventDefault(); input[key] = false; };
+  el.addEventListener('pointerdown', on);
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => el.addEventListener(t, off));
+}
+hold($('cL'), 'left'); hold($('cR'), 'right');
+$('cS').addEventListener('pointerdown', e => { e.preventDefault(); toggleMode(); });
+
+// ===== ループ =====
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  if (state === 'play') update(dt);
+  draw();
+  updateHud();
+  requestAnimationFrame(loop);
+}
+
+resize();
+showMenu();
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
