@@ -32,6 +32,7 @@ canvas{display:block;width:100%;height:100%}
 button{font:inherit;border:0;border-radius:10px;padding:10px 16px;background:var(--panel);color:var(--fg);cursor:pointer}
 button.pri{background:var(--accent);color:#2a2000;font-weight:700}
 button small{display:block;font-size:11px;opacity:.75}
+#ov a.home{font-size:13px;color:var(--sub)}
 #ctl{display:flex;gap:8px;width:100%;max-width:480px}
 #ctl button{flex:1;font-size:26px;padding:10px 0;touch-action:none}
 #ctl button.sw{flex:1.4;font-size:18px}
@@ -273,6 +274,8 @@ function updateHud() {
 }
 
 // ===== 画面 =====
+const HOME_LINK = '<a class="home" href="../index.html">🏠 トップページに戻る</a>';
+
 function showMenu() {
   state = 'menu';
   const hi = loadHi();
@@ -289,7 +292,8 @@ function showMenu() {
       ${Object.entries(DIFF).map(([k, d]) =>
         `<button class="${k === 'easy' ? 'pri' : ''}" data-k="${k}">${d.label}<small>HI ${hi[k] ?? '-'}</small></button>`
       ).join('')}
-    </div>`;
+    </div>
+    ${HOME_LINK}`;
   ov.classList.remove('hide');
   ov.querySelectorAll('button[data-k]').forEach(b => b.onclick = () => newGame(b.dataset.k));
 }
@@ -313,7 +317,8 @@ function endGame() {
     <div class="btns">
       <button class="pri" id="again">もう一回</button>
       <button id="menu">難易度選択</button>
-    </div>`;
+    </div>
+    ${HOME_LINK}`;
   ov.classList.remove('hide');
   $('again').onclick = () => newGame(g.key);
   $('menu').onclick = showMenu;
@@ -322,7 +327,7 @@ function endGame() {
 function pause() {
   if (state !== 'play') return;
   state = 'pause';
-  ov.innerHTML = `<h1>一時停止中</h1><div class="btns"><button class="pri" id="resume">つづける</button><button id="quit">やめる</button></div>`;
+  ov.innerHTML = `<h1>一時停止中</h1><div class="btns"><button class="pri" id="resume">つづける</button><button id="quit">やめる</button></div>${HOME_LINK}`;
   ov.classList.remove('hide');
   $('resume').onclick = () => { state = 'play'; ov.classList.add('hide'); };
   $('quit').onclick = showMenu;
