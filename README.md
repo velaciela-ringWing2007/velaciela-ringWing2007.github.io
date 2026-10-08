@@ -41,9 +41,6 @@
 ├── threat-map/                # 攻撃監視コンソール
 │   ├── index.html
 │   └── README.md
-├── unchi-catch/               # うんちキャッチ（ミニゲーム）
-│   ├── index.html
-│   └── README.md
 └── README.md
 ```
 
@@ -163,23 +160,6 @@ https://velaciela-ringWing2007.github.io/threat-map/
 - **防衛支援AI〈ククリ〉** - 選択肢式アシスタント
 
 詳細は [threat-map/README.md](threat-map/README.md) を参照。
-
----
-
-## 💩 うんちキャッチ
-
-https://velaciela-ringWing2007.github.io/unchi-catch/
-
-上を飛び回るネズミが落とす💩を、ペンギンが🍚と🧹を持ち替えながらさばくインベーダー風ミニゲーム。
-
-### 機能
-
-- **🍚 / 🧹 の持ち替え** - 🍚の間は飯ptが貯まり、🧹で💩をキャッチすると箒pt
-- **3つの稼ぎ方** - 避けて飯pt / キャッチで箒pt / 直撃狙いでマイナス最高点
-- **初級〜上級** - ネズミの数と💩の量で難易度が変わる
-- **キーボード・スマホ両対応**、難易度別ハイスコア保存
-
-詳細は [unchi-catch/README.md](unchi-catch/README.md) を参照。
 
 ---
 
