@@ -98,7 +98,7 @@ const rand = (a, b) => a + Math.random() * (b - a);
 function newGame(key) {
   const d = DIFF[key];
   game = {
-    key, d, time: d.time, t: 0, rice: 0, broom: 0, mode: 'rice', px: W / 2,
+    key, d, time: d.time, t: 0, rice: 0, broom: 0, mode: 'rice', px: W / 2, face: -1,
     mice: [], poops: [], fx: [], splats: [], shake: 0, hurt: 0, sweep: 0,
     stats: { catch: 0, rice: 0, body: 0, miss: 0 },
   };
@@ -118,8 +118,9 @@ function toggleMode() {
   addFx(game.mode === 'rice' ? '🍚' : '🧹', playerItemX(), H - 130, '#fff', 22);
 }
 
-const playerItemX = () => game.px - 28;
-const playerBodyX = () => game.px + 14;
+// face: -1=左向き（道具が左）/ 1=右向き（道具が右）
+const playerItemX = () => game.px + 28 * game.face;
+const playerBodyX = () => game.px - 14 * game.face;
 const ITEM_Y = H - 96, BODY_Y = H - 70;
 
 function addFx(text, x, y, color, size = 20) {
@@ -135,7 +136,9 @@ function update(dt) {
 
   // プレイヤー移動
   const dir = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-  g.px = Math.max(52, Math.min(W - 34, g.px + dir * PLAYER_SPEED * dt));
+  if (dir) g.face = dir;
+  const pxMin = g.face < 0 ? 52 : 34, pxMax = g.face < 0 ? W - 34 : W - 52;
+  g.px = Math.max(pxMin, Math.min(pxMax, g.px + dir * PLAYER_SPEED * dt));
 
   // 飯ポイント：🍚モードの時だけ貯まる
   if (g.mode === 'rice') g.rice += PT.ricePerSec * dt;
@@ -145,6 +148,7 @@ function update(dt) {
     const s = g.t * m.freq + m.phase;
     m.x = W / 2 + (W / 2 - 40) * Math.sin(s) + 16 * Math.cos(g.t * 4 + m.phase);
     m.y = m.baseY + 14 * Math.sin(g.t * 4 + m.phase);
+    m.face = Math.cos(s) >= 0 ? 1 : -1; // 大きな左右移動の向き（くるくる分は無視）
     m.trailT -= dt;
     if (m.trailT <= 0) { m.trail.push({ x: m.x, y: m.y, life: 0.7 }); m.trailT = 0.14; }
     for (const p of m.trail) p.life -= dt;
@@ -200,10 +204,11 @@ function update(dt) {
 }
 
 // ===== 描画 =====
-function emoji(ch, x, y, size, alpha = 1, rot = 0) {
+// flip=true で左右反転（絵文字はだいたい左向きなので、右向きにしたい時に使う）
+function emoji(ch, x, y, size, alpha = 1, rot = 0, flip = false) {
   ctx.save();
   ctx.globalAlpha = alpha;
-  ctx.translate(x, y); if (rot) ctx.rotate(rot);
+  ctx.translate(x, y); if (flip) ctx.scale(-1, 1); if (rot) ctx.rotate(rot);
   ctx.font = `${size}px ${EMOJI_FONT}`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(ch, 0, 0);
@@ -229,26 +234,26 @@ function draw() {
   // ネズミと軌跡
   for (const m of g.mice) {
     for (const p of m.trail) emoji('➰', p.x, p.y, 14, p.life * 0.6);
-    emoji('🐁', m.x, m.y, 30);
+    emoji('🐁', m.x, m.y, 30, 1, 0, m.face > 0);
   }
   // うんち
   for (const p of g.poops) emoji('💩', p.x, p.y, 26, 1, p.rot);
 
   // プレイヤー
-  const ix = playerItemX(), bx = playerBodyX();
+  const ix = playerItemX(), bx = playerBodyX(), fr = g.face > 0, f = g.face;
   if (g.mode === 'broom') {
     const r = g.sweep > 0 ? Math.sin(g.sweep * 40) * 0.5 : -0.2;
-    emoji('🧹', ix, ITEM_Y, 34, 1, r);
+    emoji('🧹', ix, ITEM_Y, 34, 1, r, fr);
   } else {
-    emoji('🍚', ix, ITEM_Y, 32);
+    emoji('🍚', ix, ITEM_Y, 32, 1, 0, fr);
     // 湯気
     const a = 0.25 + 0.15 * Math.sin(g.t * 5);
     ctx.strokeStyle = `rgba(255,255,255,${a})`; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(ix - 4, ITEM_Y - 20);
-    ctx.quadraticCurveTo(ix + 4, ITEM_Y - 28, ix - 2, ITEM_Y - 36); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ix + 4 * f, ITEM_Y - 20);
+    ctx.quadraticCurveTo(ix - 4 * f, ITEM_Y - 28, ix + 2 * f, ITEM_Y - 36); ctx.stroke();
   }
   const blink = g.hurt > 0 && Math.floor(g.hurt * 20) % 2 === 0;
-  emoji('🐧', bx, BODY_Y, 44, blink ? 0.3 : 1);
+  emoji('🐧', bx, BODY_Y, 44, blink ? 0.3 : 1, 0, fr);
 
   // エフェクト文字
   for (const f of g.fx) {
