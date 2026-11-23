@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0b0e14">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>ひかりの じっけん</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="../icons/icon.svg">
+  <style>
+    :root {
+      --ui-bg: #121622;
+      --ui-panel: #1e2435;
+      --ui-text: #eef2fa;
+      --ui-sub: #9fa9c0;
+      --accent: #ffd43b;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      font-family: "Hiragino Maru Gothic ProN", "Yu Gothic UI", "Segoe UI", system-ui, sans-serif;
+      background: var(--ui-bg); color: var(--ui-text);
+      overscroll-behavior: none;
+      -webkit-user-select: none; user-select: none;
+    }
+    body { display: flex; flex-direction: column; }
+
+    header { padding: 10px 12px 4px; text-align: center; }
+    h1 { margin: 0 0 8px; font-size: 1.2rem; letter-spacing: .04em; }
+    .mode-tabs { display: flex; gap: 8px; justify-content: center; max-width: 560px; margin: 0 auto; }
+    .mode-tab {
+      flex: 1; padding: 10px 6px; border: 2px solid transparent; border-radius: 16px;
+      background: var(--ui-panel); color: var(--ui-sub);
+      font-size: .98rem; font-weight: 700; cursor: pointer; line-height: 1.3;
+      transition: transform .08s ease, border-color .15s ease, color .15s ease;
+    }
+    .mode-tab .emoji { font-size: 1.35rem; display: block; }
+    .mode-tab:active { transform: scale(.96); }
+    .mode-tab.active { color: var(--ui-text); border-color: var(--accent); background: #273049; }
+
+    .stage-wrap {
+      flex: 1; position: relative; margin: 8px 10px; border-radius: 18px; overflow: hidden;
+      box-shadow: 0 0 0 2px rgba(255,255,255,.06);
+      touch-action: none;
+    }
+    #stage { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+    .hint {
+      position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
+      padding: 7px 14px; border-radius: 999px; max-width: calc(100% - 20px);
+      font-size: .82rem; font-weight: 700; text-align: center;
+      background: rgba(0,0,0,.45); color: #fff; pointer-events: none;
+      backdrop-filter: blur(2px);
+    }
+
+    .toolbar { display: flex; gap: 10px; justify-content: center; padding: 8px 10px calc(4px + env(safe-area-inset-bottom)); }
+    .btn {
+      border: none; border-radius: 12px; padding: 9px 16px; font-size: .9rem; font-weight: 700;
+      background: var(--ui-panel); color: var(--ui-text); cursor: pointer;
+    }
+    .btn:active { transform: scale(.96); }
+    .tip { text-align: center; color: var(--ui-sub); font-size: .74rem; padding: 0 12px 6px; line-height: 1.5; }
+    a.home { color: var(--ui-sub); font-size: .78rem; text-decoration: none; }
+    a.home:active { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🔬 ひかりの じっけん</h1>
+    <div class="mode-tabs">
+      <button class="mode-tab active" data-mode="mirror"><span class="emoji">🔦</span>かがみ</button>
+      <button class="mode-tab" data-mode="prism"><span class="emoji">🌈</span>プリズム</button>
+      <button class="mode-tab" data-mode="shadow"><span class="emoji">🌑</span>かげ</button>
+    </div>
+  </header>
+
+  <div class="stage-wrap">
+    <canvas id="stage"></canvas>
+    <div class="hint" id="hint"></div>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn" id="resetBtn">さいしょから</button>
+  </div>
+  <p class="tip" id="tip"></p>
+  <p class="tip"><a class="home" href="../index.html">← ツール いちらんへ</a></p>
+
+  <script>
+  (function () {
+    "use strict";
+
+    const canvas = document.getElementById("stage");
+    const ctx = canvas.getContext("2d");
+    const hintEl = document.getElementById("hint");
+    const tipEl = document.getElementById("tip");
+
+    let W = 0, H = 0, DPR = 1;
+    let currentMode = "mirror";
+
+    // ===== ベクトル / 幾何ヘルパー =====
+    const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
+    const add = (a, b) => ({ x: a.x + b.x, y: a.y + b.y });
+    const mul = (a, s) => ({ x: a.x * s, y: a.y * s });
+    const len = a => Math.hypot(a.x, a.y);
+    const norm = a => { const l = len(a) || 1; return { x: a.x / l, y: a.y / l }; };
+    const dot = (a, b) => a.x * b.x + a.y * b.y;
+    const cross = (a, b) => a.x * b.y - a.y * b.x;
+    const perp = a => ({ x: -a.y, y: a.x });
+
+    // レイ P+t*d と 線分 A-B の交差。手前(t>eps)かつ線分内のとき {t, point} を返す
+    function raySeg(P, d, A, B) {
+      const v1 = sub(P, A), v2 = sub(B, A), v3 = perp(d);
+      const den = dot(v2, v3);
+      if (Math.abs(den) < 1e-9) return null;
+      const t1 = cross(v2, v1) / den;      // レイのパラメータ（d が単位なら距離）
+      const t2 = dot(v1, v3) / den;        // 線分のパラメータ 0..1
+      if (t1 > 1e-6 && t2 >= -1e-6 && t2 <= 1 + 1e-6) return { t: t1, point: add(P, mul(d, t1)) };
+      return null;
+    }
+    // 鏡面反射
+    function reflect(d, segDir) {
+      const n = norm(perp(segDir));
+      return sub(d, mul(n, 2 * dot(d, n)));
+    }
+    // 屈折（eta = n1/n2）。全反射のとき null
+    function refract(d, nrm, eta) {
+      let n = nrm;
+      let cosi = -dot(d, n);
+      if (cosi < 0) { n = { x: -n.x, y: -n.y }; cosi = -cosi; }
+      const k = 1 - eta * eta * (1 - cosi * cosi);
+      if (k < 0) return null;
+      const c2 = Math.sqrt(k);
+      return norm({ x: eta * d.x + (eta * cosi - c2) * n.x, y: eta * d.y + (eta * cosi - c2) * n.y });
+    }
+    // キャンバスの外枠を線分で（光の出口を求める用）
+    function borderSegs() {
+      return [
+        [{ x: 0, y: 0 }, { x: W, y: 0 }],
+        [{ x: W, y: 0 }, { x: W, y: H }],
+        [{ x: W, y: H }, { x: 0, y: H }],
+        [{ x: 0, y: H }, { x: 0, y: 0 }]
+      ];
+    }
+
+    // ===== 描画ヘルパー =====
+    function glowLine(pts, color, width) {
+      if (pts.length < 2) return;
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+      // 太く薄い光のにじみ
+      ctx.strokeStyle = color; ctx.globalAlpha = 0.18; ctx.lineWidth = width * 3.2;
+      strokePath(pts);
+      ctx.globalAlpha = 0.9; ctx.lineWidth = width; strokePath(pts);
+      ctx.globalAlpha = 1;
+    }
+    function strokePath(pts) {
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+    }
+    function drawHandle(p, color, r) {
+      r = r || 9;
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,255,255,.14)"; ctx.fill();
+      ctx.lineWidth = 2.5; ctx.strokeStyle = color || "#fff"; ctx.stroke();
+      ctx.beginPath(); ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2); ctx.fillStyle = color || "#fff"; ctx.fill();
+    }
+    function sun(p, r, glow) {
+      ctx.save();
+      const g = ctx.createRadialGradient(p.x, p.y, 1, p.x, p.y, r * 2.4);
+      g.addColorStop(0, glow || "rgba(255,240,180,.9)");
+      g.addColorStop(1, "rgba(255,240,180,0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, r * 2.4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#fff6cf"; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    // ===================================================================
+    // シーン定義：各モードが handles(ドラッグ点) と draw() を持つ
+    // 位置は 0..1 の割合で保持 → リサイズに強い
+    // ===================================================================
+    function P(fx, fy) { return { fx, fy }; }
+    function px(h) { return { x: h.fx * W, y: h.fy * H }; }
+
+    const scenes = {
+      // ---------- 鏡と反射 ----------
+      mirror: {
+        hint: "🔦 ひかりは まっすぐ すすんで、かがみで はねかえるよ（入る角度＝出る角度）",
+        tip: "てんとう（光のもと）・まと・かがみ を ドラッグ して うごかそう。",
+        make() {
+          return {
+            src: P(0.07, 0.24), aim: P(0.33, 0.33),
+            m1a: P(0.68, 0.10), m1b: P(0.80, 0.52),
+            m2a: P(0.24, 0.84), m2b: P(0.60, 0.74)
+          };
+        },
+        points(s) { return [s.src, s.aim, s.m1a, s.m1b, s.m2a, s.m2b]; },
+        draw(s) {
+          background("#0b0e16");
+          const src = px(s.src), aim = px(s.aim);
+          const mirrors = [[px(s.m1a), px(s.m1b)], [px(s.m2a), px(s.m2b)]];
+
+          // 鏡を描く（銀色＋裏のハッチ）
+          mirrors.forEach(m => drawMirror(m[0], m[1]));
+
+          // レイトレース
+          let p = src, d = norm(sub(aim, src));
+          const path = [p];
+          let firstBounce = null;
+          for (let b = 0; b < 16; b++) {
+            let best = null, bestMirror = null;
+            mirrors.forEach(m => {
+              const hit = raySeg(p, d, m[0], m[1]);
+              if (hit && (!best || hit.t < best.t)) { best = hit; bestMirror = m; }
+            });
+            let wall = null;
+            borderSegs().forEach(e => {
+              const hit = raySeg(p, d, e[0], e[1]);
+              if (hit && (!wall || hit.t < wall.t)) wall = hit;
+            });
+            if (best && (!wall || best.t < wall.t)) {
+              path.push(best.point);
+              const segDir = norm(sub(bestMirror[1], bestMirror[0]));
+              if (!firstBounce) firstBounce = { point: best.point, inDir: d, segDir };
+              d = norm(reflect(d, segDir));
+              p = best.point;
+            } else {
+              path.push(wall ? wall.point : add(p, mul(d, Math.max(W, H) * 2)));
+              break;
+            }
+          }
+
+          glowLine(path, "#ff4d4d", 3);
+          // 最初の反射で「おなじ角度」を見せる
+          if (firstBounce) drawReflectionAngles(firstBounce);
+
+          sun(src, 12, "rgba(255,120,120,.8)");
+          drawHandle(aim, "#ff8a8a", 8);
+          mirrors.forEach(m => { drawHandle(m[0], "#9fd3ff", 8); drawHandle(m[1], "#9fd3ff", 8); });
+        }
+      },
+
+      // ---------- プリズム（分散） ----------
+      prism: {
+        hint: "🌈 しろい ひかりは プリズムで おれて、7つの いろに わかれるよ",
+        tip: "ひかりの もと を 上下に ドラッグ して、にじ の でかた を かえてみよう。",
+        make() { return { src: P(0.08, 0.44), aim: P(0.30, 0.47) }; },
+        points(s) { return [s.src, s.aim]; },
+        draw(s) {
+          background("#0a0c14");
+          // プリズム（正三角形・頂点上）
+          const cx = 0.60 * W, cy = 0.54 * H, L = 0.34 * Math.min(W, H), hh = L * 0.866;
+          const top = { x: cx, y: cy - hh * 0.5 };
+          const bl = { x: cx - L * 0.5, y: cy + hh * 0.5 };
+          const br = { x: cx + L * 0.5, y: cy + hh * 0.5 };
+          const faces = [[bl, top], [top, br], [bl, br]];
+          drawPrism(top, bl, br);
+
+          const src = px(s.src);
+          let aim = px(s.aim);
+          let d = norm(sub(aim, src));
+
+          // 入口（最初に当たるプリズム面）
+          let entry = null, entryFace = null;
+          faces.forEach(f => {
+            const hit = raySeg(src, d, f[0], f[1]);
+            if (hit && (!entry || hit.t < entry.t)) { entry = hit; entryFace = f; }
+          });
+
+          if (!entry) {
+            // プリズムに当たらない → 白い光がそのまま壁へ
+            let wall = null;
+            borderSegs().forEach(e => { const h = raySeg(src, d, e[0], e[1]); if (h && (!wall || h.t < wall.t)) wall = h; });
+            glowLine([src, wall ? wall.point : add(src, mul(d, W))], "#ffffff", 3);
+          } else {
+            glowLine([src, entry.point], "#ffffff", 3);  // 白い光（入るまで）
+            const colors = [
+              { c: "#ff2d2d", n: 1.505 }, { c: "#ff8a00", n: 1.510 }, { c: "#ffe100", n: 1.516 },
+              { c: "#37d13a", n: 1.522 }, { c: "#22a7ff", n: 1.528 }, { c: "#2b4bff", n: 1.534 },
+              { c: "#9b30ff", n: 1.542 }
+            ];
+            const fnorm = norm(perp(norm(sub(entryFace[1], entryFace[0]))));
+            colors.forEach(col => {
+              let dir = refract(d, fnorm, 1 / col.n);
+              if (!dir) return;
+              let p = entry.point, face = entryFace;
+              const seg = [p];
+              let done = false;
+              for (let b = 0; b < 6 && !done; b++) {
+                let hit = null, hFace = null;
+                faces.forEach(f => {
+                  if (f === face) return;
+                  const h = raySeg(p, dir, f[0], f[1]);
+                  if (h && (!hit || h.t < hit.t)) { hit = h; hFace = f; }
+                });
+                if (!hit) break;
+                seg.push(hit.point);
+                const hn = norm(perp(norm(sub(hFace[1], hFace[0]))));
+                const out = refract(dir, hn, col.n / 1);
+                if (!out) { // 全反射 → 中で反射して続行
+                  dir = norm(reflect(dir, norm(sub(hFace[1], hFace[0]))));
+                  p = hit.point; face = hFace; continue;
+                }
+                // 外へ出て壁まで
+                let wall = null;
+                borderSegs().forEach(e => { const h2 = raySeg(hit.point, out, e[0], e[1]); if (h2 && (!wall || h2.t < wall.t)) wall = h2; });
+                seg.push(wall ? wall.point : add(hit.point, mul(out, W)));
+                done = true;
+              }
+              glowLine(seg, col.c, 2.4);
+            });
+          }
+
+          sun(src, 11, "rgba(255,255,255,.85)");
+          drawHandle(aim, "#cfe6ff", 8);
+        }
+      },
+
+      // ---------- 影 ----------
+      shadow: {
+        hint: "🌑 まっすぐな ひかりが ボールに あたると、はんたいがわに かげが できるよ",
+        tip: "たいよう と ボール を ドラッグ。たいよう を うごかすと かげも のびたり うごいたり！",
+        make() { return { light: P(0.22, 0.14), ball: P(0.52, 0.52) }; },
+        points(s) { return [s.light, s.ball]; },
+        draw(s) {
+          const floorY = 0.80 * H;
+          // 空
+          const sky = ctx.createLinearGradient(0, 0, 0, floorY);
+          sky.addColorStop(0, "#1b2a4a"); sky.addColorStop(1, "#395a86");
+          ctx.fillStyle = sky; ctx.fillRect(0, 0, W, floorY);
+          // 地面
+          const gnd = ctx.createLinearGradient(0, floorY, 0, H);
+          gnd.addColorStop(0, "#c9a86a"); gnd.addColorStop(1, "#a6824a");
+          ctx.fillStyle = gnd; ctx.fillRect(0, floorY, W, H - floorY);
+
+          const L = px(s.light);
+          const C = px(s.ball);
+          const r = 0.09 * Math.min(W, H);
+
+          // 光源→ボール円への接線で影の両端を求める
+          const dC = sub(C, L), dist = len(dC);
+          if (dist > r + 1) {
+            const base = Math.atan2(dC.y, dC.x);
+            const ang = Math.asin(r / dist);
+            const edges = [];
+            [base - ang, base + ang].forEach(a => {
+              const dir = { x: Math.cos(a), y: Math.sin(a) };
+              if (dir.y > 1e-3) {
+                const t = (floorY - L.y) / dir.y;
+                if (t > 0) edges.push({ x: L.x + dir.x * t, y: floorY, dir });
+              }
+            });
+            if (edges.length === 2) {
+              // 影（地面の暗い楕円）
+              const midX = (edges[0].x + edges[1].x) / 2;
+              const halfW = Math.abs(edges[1].x - edges[0].x) / 2;
+              ctx.save();
+              ctx.globalAlpha = 0.33; ctx.fillStyle = "#1a1206";
+              ctx.beginPath();
+              ctx.ellipse(midX, floorY, Math.max(halfW, r * 0.5), r * 0.42, 0, 0, Math.PI * 2);
+              ctx.fill(); ctx.restore();
+              // ボールの端をかすめる光の線（まっすぐ＝影のできる理由）
+              ctx.setLineDash([6, 6]); ctx.lineWidth = 1.5; ctx.strokeStyle = "rgba(255,245,200,.7)";
+              edges.forEach(e => { ctx.beginPath(); ctx.moveTo(L.x, L.y); ctx.lineTo(e.x, e.y); ctx.stroke(); });
+              ctx.setLineDash([]);
+            }
+          }
+
+          // 太陽の光（ふんわり）
+          const halo = ctx.createRadialGradient(L.x, L.y, 2, L.x, L.y, Math.max(W, H));
+          halo.addColorStop(0, "rgba(255,245,200,.25)"); halo.addColorStop(0.25, "rgba(255,245,200,0)");
+          ctx.fillStyle = halo; ctx.fillRect(0, 0, W, floorY);
+
+          // ボール
+          const bg = ctx.createRadialGradient(C.x - r * 0.3, C.y - r * 0.3, r * 0.2, C.x, C.y, r);
+          bg.addColorStop(0, "#ff8f6b"); bg.addColorStop(1, "#d53a3a");
+          ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(C.x, C.y, r, 0, Math.PI * 2); ctx.fill();
+
+          sun(L, 14, "rgba(255,240,170,.95)");
+          drawHandle(C, "#ffd0c0", 8);
+        }
+      }
+    };
+
+    // 現在のシーン状態（ドラッグ点）
+    let state = scenes[currentMode].make();
+
+    // ===== 共通の描画部品 =====
+    function background(color) { ctx.fillStyle = color; ctx.fillRect(0, 0, W, H); }
+
+    function drawMirror(a, b) {
+      const dir = norm(sub(b, a));
+      const n = norm(perp(dir));
+      ctx.lineCap = "round";
+      ctx.strokeStyle = "#cfe0f2"; ctx.lineWidth = 5; strokePath([a, b]);
+      // 裏側のハッチ
+      ctx.strokeStyle = "rgba(120,150,190,.7)"; ctx.lineWidth = 2;
+      const L = len(sub(b, a)); const step = 12;
+      for (let t = 6; t < L; t += step) {
+        const base = add(a, mul(dir, t));
+        const q = add(base, mul(n, -8));
+        ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.lineTo(q.x, q.y); ctx.stroke();
+      }
+    }
+
+    function drawReflectionAngles(fb) {
+      const p = fb.point, n = norm(perp(fb.segDir));
+      // 法線（点線）
+      ctx.setLineDash([5, 5]); ctx.lineWidth = 1.5; ctx.strokeStyle = "rgba(255,255,255,.55)";
+      ctx.beginPath();
+      ctx.moveTo(p.x - n.x * 34, p.y - n.y * 34);
+      ctx.lineTo(p.x + n.x * 34, p.y + n.y * 34);
+      ctx.stroke(); ctx.setLineDash([]);
+      // 入射・反射方向
+      const inDir = norm(mul(fb.inDir, -1));
+      const outDir = norm(reflect(fb.inDir, fb.segDir));
+      let nn = n; if (dot(inDir, nn) < 0) nn = mul(n, -1);
+      const a0 = Math.atan2(nn.y, nn.x);
+      const ai = Math.atan2(inDir.y, inDir.x);
+      const ao = Math.atan2(outDir.y, outDir.x);
+      ctx.strokeStyle = "rgba(255,212,59,.9)"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 22, Math.min(a0, ai), Math.max(a0, ai)); ctx.stroke();
+      ctx.beginPath(); ctx.arc(p.x, p.y, 22, Math.min(a0, ao), Math.max(a0, ao)); ctx.stroke();
+    }
+
+    function drawPrism(top, bl, br) {
+      ctx.save();
+      const g = ctx.createLinearGradient(bl.x, top.y, br.x, br.y);
+      g.addColorStop(0, "rgba(180,210,255,.22)"); g.addColorStop(1, "rgba(200,230,255,.10)");
+      ctx.beginPath(); ctx.moveTo(top.x, top.y); ctx.lineTo(br.x, br.y); ctx.lineTo(bl.x, bl.y); ctx.closePath();
+      ctx.fillStyle = g; ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = "rgba(200,225,255,.65)"; ctx.stroke();
+      ctx.restore();
+    }
+
+    // ===== レンダリング（必要なときだけ） =====
+    let queued = false;
+    function render() {
+      if (queued) return; queued = true;
+      requestAnimationFrame(() => { queued = false; scenes[currentMode].draw(state); });
+    }
+
+    function fitCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      W = rect.width; H = rect.height;
+      DPR = Math.min(2, window.devicePixelRatio || 1);
+      canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      render();
+    }
+
+    // ===== ドラッグ操作 =====
+    let dragging = null;
+    function pointerPos(e) {
+      const rect = canvas.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    }
+    canvas.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      const m = pointerPos(e);
+      const pts = scenes[currentMode].points(state);
+      let nearest = null, nd = 28;
+      pts.forEach(h => {
+        const p = px(h); const d = Math.hypot(p.x - m.x, p.y - m.y);
+        if (d < nd) { nd = d; nearest = h; }
+      });
+      if (nearest) { dragging = nearest; canvas.setPointerCapture(e.pointerId); }
+    });
+    canvas.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      const m = pointerPos(e);
+      dragging.fx = Math.max(0, Math.min(1, m.x / W));
+      dragging.fy = Math.max(0, Math.min(1, m.y / H));
+      render();
+    });
+    function endDrag(e) { dragging = null; try { canvas.releasePointerCapture(e.pointerId); } catch (_) {} }
+    canvas.addEventListener("pointerup", endDrag);
+    canvas.addEventListener("pointercancel", endDrag);
+
+    // ===== モード切り替え =====
+    function applyMode() {
+      const sc = scenes[currentMode];
+      hintEl.textContent = sc.hint;
+      tipEl.textContent = sc.tip;
+      document.querySelectorAll(".mode-tab").forEach(t => t.classList.toggle("active", t.dataset.mode === currentMode));
+      state = sc.make();
+      render();
+    }
+    document.querySelectorAll(".mode-tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        if (currentMode === tab.dataset.mode) return;
+        currentMode = tab.dataset.mode; applyMode();
+      });
+    });
+    document.getElementById("resetBtn").addEventListener("click", () => { state = scenes[currentMode].make(); render(); });
+
+    window.addEventListener("resize", fitCanvas);
+    window.addEventListener("load", () => { fitCanvas(); applyMode(); });
+    fitCanvas(); applyMode();
+  })();
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/service-worker.js").catch(() => {});
+  }
+  </script>
+</body>
+</html>

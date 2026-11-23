@@ -1,0 +1,18 @@
+{
+  "name": "ひかりの じっけん",
+  "short_name": "ひかり",
+  "description": "光の直進・鏡の反射・プリズムの分散・影のでき方を、ドラッグして試せる子供向けの光の実験アプリ",
+  "start_url": "/light-lab/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#121622",
+  "theme_color": "#0b0e14",
+  "icons": [
+    {
+      "src": "../icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
