@@ -418,7 +418,7 @@
     //   ・下面は ほぼ直線／上面は 翼なりに曲がり＆加速、後方で 剥離
     // =====================================================================
     const WG = {
-      UINF: 2.4, R: 62, CAMBER: 0.10, alpha: 0.18, center: null, lines: [], parts: [], poly: [], shed: [], spawnT: 0,
+      UINF: 2.4, R: 62, CAMBER: 0.10, alpha: 0.18, windMul: 1, center: null, lines: [], parts: [], poly: [], shed: [], spawnT: 0,
       make() {
         this.R = clamp(Math.min(W, H)*0.085, 54, 118);   // 画面サイズに合わせて翼を大きく（4Kでも見やすく）
         this.center = { x: 0.44*W, y: 0.5*H };
@@ -433,7 +433,7 @@
       // 有効循環（＝揚力）: 失速角までは増え、超えるとガクッと落ちる（ストールドロップ）
       cl(){ const deg=Math.abs(this.alpha*180/Math.PI); const base=Math.sin(this.alpha)+this.CAMBER;
         const stall=clamp((deg-13)/5, 0, 1); return base*(1-0.7*stall); },
-      gamma(){ return this.UINF * this.R * this.cl(); }, // 揚力矢印の目安
+      gamma(){ return this.UINF * this.windMul * this.R * this.cl(); }, // 揚力矢印の目安（風力で増える）
       buildPoly() {
         if (this.pivot){ const ch0=this.chord(), c0=Math.cos(this.alpha), s0=Math.sin(this.alpha);
           this.center={ x:this.pivot.x + 0.5*ch0*c0, y:this.pivot.y + 0.5*ch0*s0 }; } // 前縁支点から中心を再計算
@@ -469,7 +469,7 @@
       },
       // ダウンウォッシュ：翼の前で空気が少し上がり（アップウォッシュ）、後ろで下へ押される（＝揚力の反作用）
       downwash(pt) {
-        const U=this.UINF, ch=this.chord();
+        const U=this.UINF*this.windMul, ch=this.chord();
         const g=this.cl();                                     // 失速で落ちる有効循環
         const dx=pt.x-this.center.x, dy=pt.y-this.center.y;
         const ca=Math.cos(this.alpha), sa=Math.sin(this.alpha);
@@ -482,7 +482,7 @@
         return g*U*1.6*s*yf*sepCut*fwd;                        // 画面+y=下向き
       },
       field(pt) {
-        const U=this.UINF, ch=this.chord(); const naF=this.nearest(pt);
+        const U=this.UINF*this.windMul, ch=this.chord(); const naF=this.nearest(pt);
         if (naF.inside) return { x:U*0.4 + naF.nx*U*0.6, y:naF.ny*U*0.6 };  // 中なら外へ
         const dx=pt.x-this.center.x, dy=pt.y-this.center.y;
         const ca=Math.cos(this.alpha), sa=Math.sin(this.alpha);
@@ -552,21 +552,22 @@
       update(){
         const deg=Math.abs(this.alpha*180/Math.PI);
         const str=clamp((deg-11)/16, 0, 1);
+        const U=this.UINF*this.windMul;   // 風力で渦の流れ・強さも増す
         const up=this.sucUp();   // 吸い込み面（＝剥離面）が上面か下面か
-        for (let i=this.shed.length-1;i>=0;i--){ const v=this.shed[i]; v.x+=this.UINF*0.6; v.y+=(up?-1:1)*this.UINF*0.05; v.G*=0.975; v.age++; if (v.x>W+40||Math.abs(v.G)<0.4) this.shed.splice(i,1); }
+        for (let i=this.shed.length-1;i>=0;i--){ const v=this.shed[i]; v.x+=U*0.6; v.y+=(up?-1:1)*U*0.05; v.G*=0.975; v.age++; if (v.x>W+40||Math.abs(v.G)<0.4) this.shed.splice(i,1); }
         this.spawnT--;
         if (str>0 && this.spawnT<=0){
           this.spawnT=Math.max(6, 16-deg*0.4);
           const ca=Math.cos(this.alpha), sa=Math.sin(this.alpha), ch=this.chord();
           const swy=(up?-1:1)*0.24*this.R;   // 吸い込み面側へ
           const S={ x:this.center.x + 0.10*ch*ca - swy*sa, y:this.center.y + 0.10*ch*sa + swy*ca }; // 剥離面やや後ろ
-          this.shed.push({ x:S.x, y:S.y, G:(up?1:-1)*this.UINF*this.R*(0.5+0.9*str), core:(this.R*0.45)*(this.R*0.45), age:0, str });
+          this.shed.push({ x:S.x, y:S.y, G:(up?1:-1)*U*this.R*(0.5+0.9*str), core:(this.R*0.45)*(this.R*0.45), age:0, str });
           if (this.shed.length>18) this.shed.shift();
         }
       },
       drawSwirls(){
         for (const v of this.shed){
-          const rad=clamp(Math.abs(v.G)/(this.UINF*this.R)*20, 6, 20), dir=v.G>=0?1:-1;
+          const rad=clamp(Math.abs(v.G)/(this.UINF*this.windMul*this.R)*20, 6, 20), dir=v.G>=0?1:-1;
           const ph=TIME*6*dir + v.age*0.12, steps=22, turns=1.6;
           ctx.strokeStyle="rgba(180,215,255,"+clamp(v.str*0.9,0.18,0.9)+")"; ctx.lineWidth=2; ctx.lineCap="round";
           ctx.beginPath();
@@ -677,6 +678,12 @@
         const deg=Math.abs(this.alpha*180/Math.PI);
         ctx.fillStyle="rgba(255,255,255,.75)"; ctx.font="bold 13px sans-serif"; ctx.textAlign="left";
         ctx.fillText("つばさの かくど: "+deg.toFixed(0)+"°", 12, 22);
+        ctx.fillStyle = this.windMul>3 ? "#9fe0ff" : "rgba(255,255,255,.7)";
+        ctx.fillText("ふうりょく: "+this.windMul.toFixed(this.windMul<10?1:0)+"×", 12, 40);
+        if (this.windMul >= 8){
+          ctx.textAlign="center"; ctx.font="bold 15px sans-serif"; ctx.fillStyle="#7dd0ff";
+          ctx.fillText("💨 ありえない かぜ！", W/2, deg>13 ? 64 : 42); ctx.textAlign="left";
+        }
         if (showForces){
           const Lp=clamp(this.gamma()*2.2, -130, 130);   // 負の揚力なら下向き
           if (Math.abs(Lp)>4) arrow(c, {x:c.x, y:c.y-Lp}, "#7dff9b", "ようりょく");
@@ -708,7 +715,7 @@
       blower: { ref: BL, hint:"🎈 まわりの かぜが 物の 上で うずを まき、全方位の 圧力（赤=おす／青=すう）で 位置が きまる",
         tip:"物を ドラッグ。白い◯で むきを かえられる。「ふうりょく」スライダーで かぜの つよさを かえられる（上げすぎると ありえない風速！）。「つぶつぶ」で 流れる粒／線、「あつりょく」で 赤=おす・青=すう。" },
       wing:   { ref: WG, hint:"✈️ かぜは 水平に ながれる。つばさの 上は はやく、はがれないと きれいに ながれる",
-        tip:"黄色い◯を 上下に ドラッグ。「つぶつぶ」で 流れる粒／線 を きりかえ。角度を あげすぎると うしろが はがれて 波打つ。" }
+        tip:"黄色い◯を 上下に ドラッグ。「ふうりょく」スライダーで かぜを 強くすると 流れが はやく（赤く）・揚力も 大きくなる。「つぶつぶ」で 流れる粒／線。角度を あげすぎると うしろが はがれて 波打つ。" }
     };
 
     // ---- 描画ループ ----
@@ -769,7 +776,7 @@
       const sc = MODES[currentMode];
       hintEl.textContent = sc.hint; tipEl.textContent = sc.tip;
       pressureBtn.style.display = currentMode==="blower" ? "" : "none";   // 圧力は ふうせん だけ
-      windCtl.style.display = currentMode==="blower" ? "" : "none";       // 風力スライダーも ふうせん だけ
+      if (typeof syncWindUI==="function") syncWindUI();                   // 風力スライダーは 両モードで有効
       document.querySelectorAll(".mode-tab").forEach(t=>t.classList.toggle("active", t.dataset.mode===currentMode));
     }
     document.querySelectorAll(".mode-tab").forEach(tab=>{
@@ -779,11 +786,21 @@
     pressureBtn.addEventListener("click",()=>{ showPressure=!showPressure; pressureBtn.classList.toggle("on",showPressure); });
     flowBtn.addEventListener("click",()=>{ flowStyle = flowStyle==="stream" ? "dots" : "stream"; flowBtn.classList.toggle("on", flowStyle==="dots"); });
     document.getElementById("resetBtn").addEventListener("click",()=>{ MODES[currentMode].ref.make(); });
-    // 風力スライダー：0〜1000 を 指数で 0.2×〜20× にマップ（1×付近を 細かく、上は ありえない風速へ）
+    // 風力スライダー：0〜1000 を 指数で 0.2×〜20× にマップ（1×付近を 細かく、上は ありえない風速へ）。
+    // 現在のモード（ふうせん／つばさ）の対象に効く。各モードは自分の windMul を覚える。
+    function windFmt(m){ return m.toFixed(m<10?1:0)+"×"; }
     function applyWind(){
+      const obj = MODES[currentMode].ref;
       const p = +windRange.value/1000;
-      BL.windMul = 0.2 * Math.pow(100, p);
-      windVal.textContent = BL.windMul.toFixed(BL.windMul<10?1:0)+"×";
+      obj.windMul = 0.2 * Math.pow(100, p);
+      windVal.textContent = windFmt(obj.windMul);
+      if (currentMode==="wing") WG.retrace();   // つばさは流線を引き直して速さの色を更新
+    }
+    function syncWindUI(){   // モード切替時：そのモードの windMul をスライダーに反映
+      const obj = MODES[currentMode].ref;
+      const p = clamp(Math.log(obj.windMul/0.2)/Math.log(100), 0, 1);
+      windRange.value = Math.round(p*1000);
+      windVal.textContent = windFmt(obj.windMul);
     }
     windRange.addEventListener("input", applyWind);
     applyWind();
