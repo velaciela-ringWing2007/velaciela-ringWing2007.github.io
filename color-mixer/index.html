@@ -96,6 +96,15 @@
     }
     #stage.light { background: #000; }
     #stage.glass { background: #fff; }
+    #stage.paint { background: #faf9f4; }
+
+    #paintCanvas {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      display: none;
+      pointer-events: none;   /* ドラッグは円（disk）で受ける */
+      z-index: 0;
+    }
 
     .hint {
       position: absolute; left: 50%; bottom: 10px;
@@ -133,6 +142,12 @@
       mix-blend-mode: multiply;
       /* ソフトな影＋常に見えるグレーの輪郭（白いガラスでも形が分かる） */
       box-shadow: 0 0 0 2px rgba(120,120,120,.75), 0 2px 10px rgba(0,0,0,.2);
+    }
+    .disk.paint {
+      mix-blend-mode: normal;
+      background: transparent !important;   /* 実際の色はキャンバスが描く */
+      /* いつも見えるグレーの枠（絵の具の“ひとかたまり”の位置が分かる） */
+      box-shadow: 0 0 0 2px rgba(90,90,90,.55), 0 2px 8px rgba(0,0,0,.12);
     }
     /* ガラスっぽい光沢（薬のように全体へは効かせない） */
     .disk.glass::after {
@@ -198,6 +213,9 @@
       <button class="mode-tab" data-mode="glass">
         <span class="emoji">🔷</span>いろガラス
       </button>
+      <button class="mode-tab" data-mode="paint">
+        <span class="emoji">🎨</span>えのぐ
+      </button>
     </div>
     <div class="pal-tabs">
       <button class="pal-tab active" data-palette="primary">3げんしょく</button>
@@ -206,7 +224,9 @@
   </header>
 
   <div class="stage-wrap">
-    <div id="stage" class="light"></div>
+    <div id="stage" class="light">
+      <canvas id="paintCanvas"></canvas>
+    </div>
     <div class="hint" id="hint"></div>
   </div>
 
@@ -244,6 +264,62 @@
       return c ? c.hex : "#888888";
     }
 
+    // ===== 絵の具（顔料）混色：RYB モデル =====
+    // 8つの角の色を三重線形補間して RYB→RGB に変換する
+    const RYB_CORNERS = {
+      c000: [255, 255, 255], // なし＝白い紙
+      c100: [238,  32,  45], // あか
+      c010: [252, 226,  35], // きいろ
+      c001: [ 30,  80, 195], // あお
+      c110: [245, 147,  30], // あか＋きいろ＝だいだい
+      c011: [ 30, 160,  70], // きいろ＋あお＝みどり
+      c101: [118,  44, 140], // あか＋あお＝むらさき
+      c111: [ 40,  30,  28]  // 3つ＝こげ茶（くろっぽい）
+    };
+    function clamp01(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
+    function rybToRgb(r, y, b) {
+      r = clamp01(r); y = clamp01(y); b = clamp01(b);
+      const C = RYB_CORNERS, out = [0, 0, 0];
+      const lerp = (a, bb, t) => a + (bb - a) * t;
+      for (let k = 0; k < 3; k++) {
+        const x00 = lerp(C.c000[k], C.c100[k], r);
+        const x01 = lerp(C.c001[k], C.c101[k], r);
+        const x10 = lerp(C.c010[k], C.c110[k], r);
+        const x11 = lerp(C.c011[k], C.c111[k], r);
+        const y0 = lerp(x00, x10, y);
+        const y1 = lerp(x01, x11, y);
+        out[k] = Math.round(lerp(y0, y1, b));
+      }
+      return out;
+    }
+    function rgbToHex(rgb) {
+      return "#" + rgb.map(v => v.toString(16).padStart(2, "0")).join("");
+    }
+
+    // 絵の具の三原色（RYB）
+    const PAINT_PRIMARIES = [
+      { name: "あか",   ryb: [1, 0, 0] },
+      { name: "きいろ", ryb: [0, 1, 0] },
+      { name: "あお",   ryb: [0, 0, 1] }
+    ];
+    // 絵の具の代表12色（RYB の配合で定義）
+    const PAINTS = [
+      { name: "あか",     ryb: [1, 0, 0] },
+      { name: "だいだい", ryb: [1, 1, 0] },
+      { name: "きいろ",   ryb: [0, 1, 0] },
+      { name: "きみどり", ryb: [0, 1, 0.4] },
+      { name: "みどり",   ryb: [0, 1, 1] },
+      { name: "みずいろ", ryb: [0, 0.15, 0.55] },
+      { name: "あお",     ryb: [0, 0, 1] },
+      { name: "むらさき", ryb: [1, 0, 1] },
+      { name: "もも",     ryb: [0.3, 0, 0.03] },
+      { name: "ちゃ",     ryb: [0.85, 0.8, 0.5] },
+      { name: "くろ",     ryb: [1, 1, 1] },
+      { name: "しろ",     ryb: [0, 0, 0] }
+    ];
+    // 表示用の hex を事前計算
+    [...PAINT_PRIMARIES, ...PAINTS].forEach(c => { c.hex = rgbToHex(rybToRgb(c.ryb[0], c.ryb[1], c.ryb[2])); });
+
     const MODES = {
       light: {
         stageClass: "light",
@@ -274,10 +350,23 @@
         hintPrimary: "🔷 色の 三原色！ みず＋もも＋きいろ で くろ に ちかづくよ",
         hintPencil:  "🔷 いろガラスは かさねると くらく！ いろいろ まぜてみよう",
         pencilDefaults: ["みずいろ", "もも", "きいろ"]
+      },
+      paint: {
+        stageClass: "paint",
+        diskClass: "paint",
+        hintClass: "",
+        canvas: true,
+        tip: "えのぐ を まぜる と、あか＋きいろ＝だいだい のように まざるよ（絵の具の三原色＝あか・きいろ・あお）。",
+        primaries: PAINT_PRIMARIES,
+        hintPrimary: "🎨 えのぐの 三原色！ あか＋きいろ＝だいだい、きいろ＋あお＝みどり、あか＋あお＝むらさき",
+        hintPencil:  "🎨 えのぐを まぜて いろいろ つくろう！ 3つ まぜると ちゃいろ っぽく",
+        pencilDefaults: ["あか", "きいろ", "あお"]
       }
     };
 
     const stage   = document.getElementById("stage");
+    const canvas  = document.getElementById("paintCanvas");
+    const ctx     = canvas.getContext("2d", { willReadFrequently: true });
     const paletteEl = document.getElementById("palette");
     const hintEl  = document.getElementById("hint");
     const tipEl   = document.getElementById("tip");
@@ -287,7 +376,8 @@
     let zCounter = 1;
 
     function activeColors() {
-      return currentPalette === "primary" ? MODES[currentMode].primaries : PENCILS;
+      if (currentPalette === "primary") return MODES[currentMode].primaries;
+      return currentMode === "paint" ? PAINTS : PENCILS;
     }
 
     function diskSize() {
@@ -298,9 +388,69 @@
 
     function clearStage() {
       stage.querySelectorAll(".disk").forEach(d => d.remove());
+      scheduleRender();
     }
 
-    function spawnDisk(hex, cx, cy) {
+    // ===== 絵の具モードのキャンバス描画（RYB 平均で重なりを混色）=====
+    let renderQueued = false;
+    function scheduleRender() {
+      if (currentMode !== "paint") return;
+      if (renderQueued) return;
+      renderQueued = true;
+      requestAnimationFrame(() => { renderQueued = false; renderPaint(); });
+    }
+
+    function renderPaint() {
+      if (currentMode !== "paint") return;
+      const rect = stage.getBoundingClientRect();
+      if (rect.width < 2 || rect.height < 2) return;
+      // 計算量を抑えるため内部解像度を縮小（CSS が引き伸ばしてソフトに見せる）
+      const scale = Math.min(1, 320 / Math.max(rect.width, rect.height));
+      const W = Math.max(1, Math.round(rect.width * scale));
+      const H = Math.max(1, Math.round(rect.height * scale));
+      if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+
+      // 円のデータ（キャンバス座標）
+      const disks = [];
+      stage.querySelectorAll(".disk").forEach(d => {
+        if (!d._ryb) return;
+        disks.push({
+          x: parseFloat(d.style.left) * scale,
+          y: parseFloat(d.style.top) * scale,
+          r: (d.offsetWidth / 2) * scale,
+          ryb: d._ryb
+        });
+      });
+
+      const img = ctx.createImageData(W, H);
+      const data = img.data;
+      const paper = [250, 249, 244]; // 白い紙
+      for (let py = 0; py < H; py++) {
+        for (let px = 0; px < W; px++) {
+          let sr = 0, sy = 0, sb = 0, n = 0;
+          for (let i = 0; i < disks.length; i++) {
+            const d = disks[i];
+            const dx = px - d.x;
+            if (dx < -d.r || dx > d.r) continue;   // 横のはみ出しは早めに除外
+            const dy = py - d.y;
+            if (dx * dx + dy * dy <= d.r * d.r) {
+              sr += d.ryb[0]; sy += d.ryb[1]; sb += d.ryb[2]; n++;
+            }
+          }
+          const idx = (py * W + px) * 4;
+          let rgb;
+          if (n === 0) {
+            rgb = paper;
+          } else {
+            rgb = rybToRgb(sr / n, sy / n, sb / n);
+          }
+          data[idx] = rgb[0]; data[idx + 1] = rgb[1]; data[idx + 2] = rgb[2]; data[idx + 3] = 255;
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+    }
+
+    function spawnDisk(color, cx, cy) {
       const mode = MODES[currentMode];
       const rect = stage.getBoundingClientRect();
       const size = diskSize();
@@ -311,13 +461,20 @@
       const disk = document.createElement("div");
       disk.className = "disk " + mode.diskClass;
       disk.style.setProperty("--size", size + "px");
-      disk.style.background = hex;
-      disk.style.color = hex; // box-shadow の currentColor 用（光のグロー）
+      disk._ryb = color.ryb || null;
+      if (mode.canvas) {
+        // 絵の具モード：実際の色はキャンバスが描くので円は透明（枠だけ）
+        disk.style.background = "transparent";
+      } else {
+        disk.style.background = color.hex;
+        disk.style.color = color.hex; // box-shadow の currentColor 用（光のグロー）
+      }
       disk.style.left = cx + "px";
       disk.style.top = cy + "px";
       disk.style.zIndex = ++zCounter;
       stage.appendChild(disk);
       makeDraggable(disk);
+      scheduleRender();
       return disk;
     }
 
@@ -331,6 +488,7 @@
         const now = Date.now();
         if (now - lastTap < 300) {
           disk.remove();
+          scheduleRender();
           return;
         }
         lastTap = now;
@@ -353,6 +511,7 @@
         y = Math.max(half * 0.2, Math.min(rect.height - half * 0.2, y));
         disk.style.left = x + "px";
         disk.style.top = y + "px";
+        scheduleRender();
       });
 
       function endDrag(e) {
@@ -371,7 +530,7 @@
         btn.innerHTML =
           '<span class="chip" style="background:' + c.hex + '"></span>' +
           '<span class="label">' + c.name + '</span>';
-        btn.addEventListener("click", () => spawnDisk(c.hex));
+        btn.addEventListener("click", () => spawnDisk(c));
         paletteEl.appendChild(btn);
       });
     }
@@ -384,18 +543,20 @@
       // 正三角形っぽく少しだけ重なる配置
       const angles = [-90, 30, 150];
       // 三原色モードは3原色を、12色モードは代表3色を並べる
+      const all = activeColors();
       const list = currentPalette === "primary"
-        ? mode.primaries.map(c => c.hex)
-        : mode.pencilDefaults.map(findHex);
-      list.forEach((hex, i) => {
+        ? all
+        : mode.pencilDefaults.map(n => all.find(c => c.name === n));
+      list.forEach((color, i) => {
         const a = angles[i % 3] * Math.PI / 180;
-        spawnDisk(hex, cx + r * Math.cos(a), cy + r * Math.sin(a));
+        spawnDisk(color, cx + r * Math.cos(a), cy + r * Math.sin(a));
       });
     }
 
     function applyMode(reset) {
       const mode = MODES[currentMode];
       stage.className = mode.stageClass;
+      canvas.style.display = mode.canvas ? "block" : "none";
       hintEl.textContent = currentPalette === "primary" ? mode.hintPrimary : mode.hintPencil;
       hintEl.className = "hint " + mode.hintClass;
       tipEl.textContent = mode.tip;
@@ -436,6 +597,7 @@
         // 既存の円の大きさだけ更新（位置はそのまま）
         const size = diskSize();
         stage.querySelectorAll(".disk").forEach(d => d.style.setProperty("--size", size + "px"));
+        scheduleRender();
       }, 200);
     });
 
