@@ -391,7 +391,10 @@
         this.retrace();
       },
       chord(){ return this.R*1.9; },
-      gamma(){ return this.UINF * this.R * (Math.sin(this.alpha) + this.CAMBER); }, // 揚力矢印の目安
+      // 有効循環（＝揚力）: 失速角までは増え、超えるとガクッと落ちる（ストールドロップ）
+      cl(){ const deg=Math.abs(this.alpha*180/Math.PI); const base=Math.sin(this.alpha)+this.CAMBER;
+        const stall=clamp((deg-13)/5, 0, 1); return base*(1-0.7*stall); },
+      gamma(){ return this.UINF * this.R * this.cl(); }, // 揚力矢印の目安
       buildPoly() {
         const c=this.center, ch=this.chord(), ca=Math.cos(this.alpha), sa=Math.sin(this.alpha);
         this.poly = AIRFOIL.map(q=>{ const X=q.x*ch, Y=-q.y*ch; return { x:c.x + X*ca - Y*sa, y:c.y + X*sa + Y*ca }; });
@@ -426,14 +429,15 @@
       // ダウンウォッシュ：翼の前で空気が少し上がり（アップウォッシュ）、後ろで下へ押される（＝揚力の反作用）
       downwash(pt) {
         const U=this.UINF, ch=this.chord();
-        const g=Math.sin(this.alpha)+this.CAMBER;             // 循環（揚力）の目安
+        const g=this.cl();                                     // 失速で落ちる有効循環
         const dx=pt.x-this.center.x, dy=pt.y-this.center.y;
         const ca=Math.cos(this.alpha), sa=Math.sin(this.alpha);
         const wx=dx*ca+dy*sa, wy=-dx*sa+dy*ca;                 // 翼座標（wx:下流, wy<0:上面側）
         const L=0.7*ch, reach=this.R*1.7;
         const s=(wx/L)*Math.exp(-0.5*(wx/L)*(wx/L));           // 前(<0)=上向き / 後(>0)=下向き
         const yf=Math.exp(-(wy*wy)/(reach*reach));
-        return g*U*1.6*s*yf;                                   // 画面+y=下向き
+        const sepCut=1-0.8*this.sepFactor(pt);                 // 剥離域は押し下げない
+        return g*U*1.6*s*yf*sepCut;                            // 画面+y=下向き
       },
       field(pt) {
         const U=this.UINF; const naF=this.nearest(pt);
@@ -451,7 +455,7 @@
           // 方向を 一様(1,0)→接線 へ ブレンド（＝表面に沿う）
           let dx=(1-follow)+follow*tx, dy=follow*ty; const dl=Math.hypot(dx,dy)||1; dx/=dl; dy/=dl;
           // 速さ：上面は加速（＝色が赤くなる・循環のかわり）、下面は少し減速
-          const spd = upper ? U*(1 + (Math.sin(this.alpha)+this.CAMBER+0.20)*1.9*follow)
+          const spd = upper ? U*(1 + (this.cl()+0.20)*1.9*follow)
                             : U*(1 - 0.12*follow);
           vx=dx*spd; vy=dy*spd;
         }
@@ -463,10 +467,24 @@
         }
         return { x:vx, y:vy };
       },
-      // つぶつぶ用：剥離の渦（うず）に巻かれる
+      // 上面後方の「死水域（剥離ウェイク）」だけ 0..1。ここだけ渦が効く（翼の腹より下は 0）
+      wakeMask(pt){
+        const deg=Math.abs(this.alpha*180/Math.PI); const on=clamp((deg-11)/6, 0, 1); if (on<=0) return 0;
+        const dx=pt.x-this.center.x, dy=pt.y-this.center.y;
+        const ca=Math.cos(this.alpha), sa=Math.sin(this.alpha);
+        const wx=dx*ca+dy*sa, wy=-dx*sa+dy*ca;                 // wy<0 上面側
+        if (wy > 0.12*this.R) return 0;                        // 翼の腹より下は 渦なし（下面は素直に下へ）
+        const xi=(wx + 0.1*this.R)/(2.8*this.R);               // 前縁付近〜後方へ
+        if (xi < 0) return 0;
+        const reach=this.R*2.0; const yf=Math.exp(-(wy*wy)/(reach*reach));
+        return on*yf*clamp(xi*1.4, 0, 1)*clamp(1.6-xi, 0, 1);
+      },
+      // つぶつぶ用：剥離ウェイクの中だけ 渦（うず）に巻かれる
       flowVel(pt){
-        const v=this.field(pt); const vo=vortexVel(pt, this.shed);
-        return { x:v.x+vo.x, y:v.y+vo.y };
+        const v=this.field(pt); const m=this.wakeMask(pt);
+        if (m<=0) return v;
+        const vo=vortexVel(pt, this.shed);
+        return { x:v.x+vo.x*m, y:v.y+vo.y*m };
       },
       // 上面後方から 渦を はきだす（迎え角が大きいほど 強く・多く）
       update(){
@@ -516,6 +534,8 @@
         for (let i=0;i<this.parts.length;i++){
           const pt=this.parts[i];
           for (let k=0;k<2;k++){ const v=this.flowVel(pt); pt.x+=v.x*1.1; pt.y+=v.y*1.1; pt.sp=len(v); }
+          const m=this.wakeMask(pt);                           // 死水域は 乱流（ランダムに クルクル）
+          if (m>0){ const j=m*this.UINF*0.9; pt.x+=(Math.random()*2-1)*j; pt.y+=(Math.random()*2-1)*j; }
           const na=this.nearest(pt);
           if (na.inside){ pt.x += na.nx*(na.dist+2); pt.y += na.ny*(na.dist+2); }   // 翼から押し出す
           pt.life++;
