@@ -210,7 +210,8 @@
           let p = src, d = norm(sub(aim, src));
           const path = [p];
           let firstBounce = null;
-          for (let b = 0; b < 16; b++) {
+          const MAX_BOUNCES = 400;   // 合わせ鏡でもずっと反射し続ける
+          for (let b = 0; b < MAX_BOUNCES; b++) {
             let best = null, bestMirror = null;
             mirrors.forEach(m => {
               const hit = raySeg(p, d, m[0], m[1]);
