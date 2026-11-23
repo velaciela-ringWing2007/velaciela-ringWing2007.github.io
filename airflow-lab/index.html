@@ -387,15 +387,20 @@
       make() {
         this.center = { x: 0.44*W, y: 0.5*H };
         this.alpha = 0.18;
+        const ch=this.chord(), ca=Math.cos(this.alpha), sa=Math.sin(this.alpha);
+        this.pivot = { x:this.center.x - 0.5*ch*ca, y:this.center.y - 0.5*ch*sa }; // 前縁を回転の支点に固定
         this.parts = []; this.shed = []; this.spawnT = 0;
         this.retrace();
       },
       chord(){ return this.R*1.9; },
+      sucUp(){ return (Math.sin(this.alpha)+this.CAMBER) >= 0; }, // 吸い込み（剥離）面が上面か
       // 有効循環（＝揚力）: 失速角までは増え、超えるとガクッと落ちる（ストールドロップ）
       cl(){ const deg=Math.abs(this.alpha*180/Math.PI); const base=Math.sin(this.alpha)+this.CAMBER;
         const stall=clamp((deg-13)/5, 0, 1); return base*(1-0.7*stall); },
       gamma(){ return this.UINF * this.R * this.cl(); }, // 揚力矢印の目安
       buildPoly() {
+        if (this.pivot){ const ch0=this.chord(), c0=Math.cos(this.alpha), s0=Math.sin(this.alpha);
+          this.center={ x:this.pivot.x + 0.5*ch0*c0, y:this.pivot.y + 0.5*ch0*s0 }; } // 前縁支点から中心を再計算
         const c=this.center, ch=this.chord(), ca=Math.cos(this.alpha), sa=Math.sin(this.alpha);
         this.poly = AIRFOIL.map(q=>{ const X=q.x*ch, Y=-q.y*ch; return { x:c.x + X*ca - Y*sa, y:c.y + X*sa + Y*ca }; });
         // 各エッジを上面／下面にタグづけ（中点のchordYで判定）→ 近くを見るとき同じ側だけ見る
@@ -473,10 +478,11 @@
         const dx=pt.x-this.center.x, dy=pt.y-this.center.y;
         const ca=Math.cos(this.alpha), sa=Math.sin(this.alpha);
         const wx=dx*ca+dy*sa, wy=-dx*sa+dy*ca;                 // wy<0 上面側
-        if (wy > 0.12*this.R) return 0;                        // 翼の腹より下は 渦なし（下面は素直に下へ）
+        const depth=this.sucUp()? -wy : wy;                    // 吸い込み面の深さ（>0でその面）
+        if (depth < -0.12*this.R) return 0;                    // 反対面は 渦なし（素直に流れる）
         const xi=(wx + 0.1*this.R)/(2.8*this.R);               // 前縁付近〜後方へ
         if (xi < 0) return 0;
-        const reach=this.R*2.0; const yf=Math.exp(-(wy*wy)/(reach*reach));
+        const reach=this.R*2.0; const yf=Math.exp(-(depth*depth)/(reach*reach));
         return on*yf*clamp(xi*1.4, 0, 1)*clamp(1.6-xi, 0, 1);
       },
       // つぶつぶ用：剥離ウェイクの中だけ 渦（うず）に巻かれる
@@ -490,13 +496,15 @@
       update(){
         const deg=Math.abs(this.alpha*180/Math.PI);
         const str=clamp((deg-11)/16, 0, 1);
-        for (let i=this.shed.length-1;i>=0;i--){ const v=this.shed[i]; v.x+=this.UINF*0.6; v.y-=this.UINF*0.05; v.G*=0.975; v.age++; if (v.x>W+40||Math.abs(v.G)<0.4) this.shed.splice(i,1); }
+        const up=this.sucUp();   // 吸い込み面（＝剥離面）が上面か下面か
+        for (let i=this.shed.length-1;i>=0;i--){ const v=this.shed[i]; v.x+=this.UINF*0.6; v.y+=(up?-1:1)*this.UINF*0.05; v.G*=0.975; v.age++; if (v.x>W+40||Math.abs(v.G)<0.4) this.shed.splice(i,1); }
         this.spawnT--;
         if (str>0 && this.spawnT<=0){
           this.spawnT=Math.max(6, 16-deg*0.4);
           const ca=Math.cos(this.alpha), sa=Math.sin(this.alpha), ch=this.chord();
-          const S={ x:this.center.x + ca*0.10*ch + sa*0.24*this.R, y:this.center.y + sa*0.10*ch - ca*0.24*this.R }; // 上面やや後ろ
-          this.shed.push({ x:S.x, y:S.y, G:this.UINF*this.R*(0.5+0.9*str), core:(this.R*0.45)*(this.R*0.45), age:0, str });
+          const swy=(up?-1:1)*0.24*this.R;   // 吸い込み面側へ
+          const S={ x:this.center.x + 0.10*ch*ca - swy*sa, y:this.center.y + 0.10*ch*sa + swy*ca }; // 剥離面やや後ろ
+          this.shed.push({ x:S.x, y:S.y, G:(up?1:-1)*this.UINF*this.R*(0.5+0.9*str), core:(this.R*0.45)*(this.R*0.45), age:0, str });
           if (this.shed.length>18) this.shed.shift();
         }
       },
@@ -550,9 +558,10 @@
         const dx=pt.x-this.center.x, dy=pt.y-this.center.y;
         const ca=Math.cos(this.alpha), sa=Math.sin(this.alpha);
         const wx = dx*ca + dy*sa, wy = -dx*sa + dy*ca;    // wy<0 上面
-        if (wy > -0.02*this.R) return 0;
+        const depth=this.sucUp()? -wy : wy;               // 吸い込み面の深さ
+        if (depth < 0.02*this.R) return 0;
         const xi = (wx + 0.1*this.R)/(2.6*this.R); if (xi<0 || xi>1) return 0;
-        const yf = clamp(1-(-wy)/(1.3*this.R),0,1);
+        const yf = clamp(1-depth/(1.3*this.R),0,1);
         return base * clamp(xi*1.5,0,1) * yf;
       },
       draw() {
@@ -583,15 +592,15 @@
         ctx.fillStyle="rgba(255,255,255,.75)"; ctx.font="bold 13px sans-serif"; ctx.textAlign="left";
         ctx.fillText("つばさの かくど: "+deg.toFixed(0)+"°", 12, 22);
         if (showForces){
-          const Lp=Math.min(130, Math.abs(this.gamma())*2.2);
-          if (Lp>4) arrow(c, {x:c.x, y:c.y-Lp}, "#7dff9b", "ようりょく");
+          const Lp=clamp(this.gamma()*2.2, -130, 130);   // 負の揚力なら下向き
+          if (Math.abs(Lp)>4) arrow(c, {x:c.x, y:c.y-Lp}, "#7dff9b", "ようりょく");
         }
         if (deg>13){
           ctx.fillStyle="#ff8a5c"; ctx.font="bold 15px sans-serif"; ctx.textAlign="center";
           ctx.fillText("うしろが はくり（しっそく ぎみ）", W/2, 42);
         }
       },
-      aoaHandlePos(){ return { x: this.center.x - this.R*1.15*Math.cos(this.alpha), y: this.center.y - this.R*1.15*Math.sin(this.alpha) }; }
+      aoaHandlePos(){ const p=this.pivot||this.center; return { x: p.x - this.R*0.9*Math.cos(this.alpha), y: p.y - this.R*0.9*Math.sin(this.alpha) }; }
     };
 
     // ---- 共通：矢印 ----
@@ -663,7 +672,7 @@
       const m=lastPointer; if(!m) return;
       if (dragTarget==="ball"){ BL.ball={x:clamp(m.x,BL.BALLR,W-BL.BALLR),y:clamp(m.y,BL.BALLR,H-BL.BALLR)}; BL.vel={x:0,y:0}; }
       else if (dragTarget==="tilt"){ const d=sub(m,BL.fan); BL.jetAng=clamp(Math.atan2(d.x,-d.y), -0.6, 0.6); }
-      else if (dragTarget==="aoa"){ WG.alpha = clamp(Math.atan2(WG.center.y - m.y, WG.center.x - m.x), -0.52, 0.52); WG.retrace(); }
+      else if (dragTarget==="aoa"){ const p=WG.pivot||WG.center; WG.alpha = clamp(Math.atan2(p.y - m.y, p.x - m.x), -0.52, 0.52); WG.retrace(); }
     }
     function endDrag(e){ dragTarget=null; try{canvas.releasePointerCapture(e.pointerId);}catch(_){} }
     canvas.addEventListener("pointerup",endDrag);
