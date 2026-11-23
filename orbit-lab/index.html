@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#06080f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>おほしさま ぐるぐる</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="../icons/icon.svg">
+  <style>
+    :root { --ui-bg:#0a0e1a; --ui-panel:#1a2133; --ui-text:#eef2fa; --ui-sub:#9fa9c0; --accent:#ffd43b; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin:0; padding:0; height:100%;
+      font-family:"Hiragino Maru Gothic ProN","Yu Gothic UI","Segoe UI",system-ui,sans-serif;
+      background:var(--ui-bg); color:var(--ui-text); overscroll-behavior:none;
+      -webkit-user-select:none; user-select:none; }
+    body { display:flex; flex-direction:column; }
+    header { padding:10px 12px 4px; text-align:center; }
+    h1 { margin:0 0 8px; font-size:1.18rem; letter-spacing:.03em; }
+    .mode-tabs { display:flex; gap:7px; justify-content:center; max-width:680px; margin:0 auto; flex-wrap:wrap; }
+    .mode-tab { flex:1; min-width:120px; padding:9px 6px; border:2px solid transparent; border-radius:16px;
+      background:var(--ui-panel); color:var(--ui-sub); font-size:.92rem; font-weight:700; cursor:pointer; line-height:1.3;
+      transition:transform .08s ease, border-color .15s ease, color .15s ease; }
+    .mode-tab .emoji { font-size:1.28rem; display:block; }
+    .mode-tab:active { transform:scale(.96); }
+    .mode-tab.active { color:var(--ui-text); border-color:var(--accent); background:#263150; }
+    .stage-wrap { flex:1; position:relative; margin:8px 10px; border-radius:18px; overflow:hidden;
+      box-shadow:0 0 0 2px rgba(255,255,255,.06); touch-action:none; }
+    #stage { position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+    .ctl-wrap { padding-bottom:calc(2px + env(safe-area-inset-bottom)); }
+    .toolbar { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; padding:6px 10px 0; }
+    .btn { border:none; border-radius:12px; padding:9px 16px; font-size:.9rem; font-weight:700;
+      background:var(--ui-panel); color:var(--ui-text); cursor:pointer; }
+    .btn:active { transform:scale(.96); }
+    .btn.on { background:var(--accent); color:#332a00; }
+    .tip { text-align:center; color:var(--ui-sub); font-size:.74rem; padding:4px 12px 2px; line-height:1.5; }
+    a.home { color:var(--ui-sub); font-size:.78rem; text-decoration:none; }
+    a.home:active { color:var(--accent); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🌌 おほしさま ぐるぐる</h1>
+    <div class="mode-tabs">
+      <button class="mode-tab active" data-sys="sun1"><span class="emoji">☀️</span>たいようと ちきゅう</button>
+      <button class="mode-tab" data-sys="binary"><span class="emoji">⭐</span>ふたごの たいよう</button>
+      <button class="mode-tab" data-sys="many"><span class="emoji">🪐</span>たくさん わくせい</button>
+      <button class="mode-tab" data-sys="empty"><span class="emoji">🌑</span>じゆうに あそぶ</button>
+    </div>
+  </header>
+
+  <div class="stage-wrap">
+    <canvas id="stage"></canvas>
+  </div>
+
+  <div class="ctl-wrap">
+    <div class="toolbar">
+      <button class="btn" id="forceBtn">➡️ ちからを みる</button>
+      <button class="btn" id="pauseBtn">⏸️ とめる</button>
+      <button class="btn" id="resetBtn">🔁 さいしょから</button>
+    </div>
+    <p class="tip" id="tip"></p>
+    <p class="tip"><a class="home" href="../index.html">← ツール いちらんへ</a></p>
+  </div>
+
+  <script>
+  (function () {
+    "use strict";
+    const canvas = document.getElementById("stage");
+    const ctx = canvas.getContext("2d", { alpha:false });
+    const tipEl = document.getElementById("tip");
+
+    let W=0, H=0, DPR=1, TIME=0;
+    const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+
+    // --- 物理定数 ---
+    const G=1.0, SOFT=12, SUB=4, H_STEP=0.3;   // Velocity Verlet（シンプレクティック）
+    let paused=false, showForces=false, curSys="sun1";
+    let bodies=[], flashes=[], stars=[];
+    let smax=9;                                  // 速度→色のスケール（適応）
+    const PCOLORS=["#7cc6ff","#9d8bff","#ff8bd0","#8bffb0","#ffd36b","#ff9b6b","#6bf0ff"];
+    let pcIdx=0;
+
+    // 速さ→色（おそい 青 → 水 → 緑 → 黄 → はやい 赤）＝ケプラー第2法則
+    const STOPS=[[70,130,255],[0,210,230],[90,225,110],[250,215,60],[255,80,50]];
+    function speedColor(sp){
+      const t=clamp(sp/smax,0,1), x=t*(STOPS.length-1), i=Math.min(STOPS.length-2,Math.floor(x)), f=x-i;
+      const a=STOPS[i], b=STOPS[i+1];
+      return "rgb("+Math.round(a[0]+(b[0]-a[0])*f)+","+Math.round(a[1]+(b[1]-a[1])*f)+","+Math.round(a[2]+(b[2]-a[2])*f)+")";
+    }
+
+    function mkStars(){ stars=[]; const n=Math.round(W*H/9000);
+      for (let i=0;i<n;i++) stars.push({x:Math.random()*W, y:Math.random()*H, r:Math.random()<0.15?1.4:0.7, a:0.2+Math.random()*0.6}); }
+
+    // 太陽質量→半径（見た目）
+    function radOf(m, sun){ return sun ? clamp(Math.cbrt(m)*1.6, 14, 40) : clamp(Math.cbrt(m)*2.2, 5, 16); }
+
+    function addBody(x,y,vx,vy,m,sun,color){
+      const b={ x,y,vx,vy,m, sun:!!sun, r:radOf(m,sun), color:color||(sun?"#ffda4a":PCOLORS[(pcIdx++)%PCOLORS.length]), trail:[] };
+      bodies.push(b); return b;
+    }
+
+    // 点(x,y)に働く重力加速度（source全体、exclude除く）
+    function gravAt(x,y, exclude){
+      let ax=0, ay=0;
+      for (let i=0;i<bodies.length;i++){ const b=bodies[i]; if (b===exclude) continue;
+        const dx=b.x-x, dy=b.y-y; const r2=dx*dx+dy*dy+SOFT*SOFT; const inv=1/Math.sqrt(r2);
+        const f=G*b.m*inv/r2; ax+=dx*f; ay+=dy*f; }
+      return {ax,ay};
+    }
+
+    function verlet(dt){
+      const n=bodies.length; if (!n) return;
+      const ax=new Float64Array(n), ay=new Float64Array(n);
+      for (let i=0;i<n;i++){ const g=gravAt(bodies[i].x,bodies[i].y,bodies[i]); ax[i]=g.ax; ay[i]=g.ay; }
+      for (let i=0;i<n;i++){ const b=bodies[i]; b.x+=b.vx*dt+0.5*ax[i]*dt*dt; b.y+=b.vy*dt+0.5*ay[i]*dt*dt; }
+      for (let i=0;i<n;i++){ const g=gravAt(bodies[i].x,bodies[i].y,bodies[i]);
+        const b=bodies[i]; b.vx+=0.5*(ax[i]+g.ax)*dt; b.vy+=0.5*(ay[i]+g.ay)*dt; }
+    }
+
+    function collide(){
+      for (let i=0;i<bodies.length;i++){ for (let j=i+1;j<bodies.length;j++){
+        const a=bodies[i], b=bodies[j]; const dx=b.x-a.x, dy=b.y-a.y;
+        if (Math.hypot(dx,dy) < (a.r+b.r)*0.7){
+          const M=a.m+b.m;                          // 運動量保存で合体
+          const nx=(a.x*a.m+b.x*b.m)/M, ny=(a.y*a.m+b.y*b.m)/M;
+          const nvx=(a.vx*a.m+b.vx*b.m)/M, nvy=(a.vy*a.m+b.vy*b.m)/M;
+          const keep=a.m>=b.m?a:b;
+          keep.x=nx; keep.y=ny; keep.vx=nvx; keep.vy=nvy; keep.m=M; keep.sun=a.sun||b.sun;
+          keep.r=radOf(M, keep.sun);
+          flashes.push({x:nx,y:ny,r:(a.r+b.r),t:0});
+          const drop=keep===a?b:a; bodies.splice(bodies.indexOf(drop),1);
+          return collide();                          // 連鎖合体
+        }
+      }}
+    }
+
+    function step(){
+      for (let k=0;k<SUB;k++) verlet(H_STEP);
+      collide();
+      let mx=6;
+      for (const b of bodies){ const sp=Math.hypot(b.vx,b.vy); if (!b.sun && sp>mx) mx=sp;
+        b.trail.push({x:b.x,y:b.y,sp}); if (b.trail.length>150) b.trail.shift(); }
+      smax += (Math.max(6,mx)-smax)*0.05;            // 色スケールを ゆっくり適応
+      for (let i=flashes.length-1;i>=0;i--){ flashes[i].t+=0.06; if (flashes[i].t>1) flashes.splice(i,1); }
+    }
+
+    // --- 予測軌道（スリングショット中）---
+    function predict(x,y,vx,vy){
+      const pts=[{x,y}]; let px=x,py=y,pvx=vx,pvy=vy; const h=H_STEP*SUB;
+      for (let i=0;i<220;i++){
+        const g=gravAt(px,py,null); pvx+=g.ax*h*0.5; pvy+=g.ay*h*0.5;
+        px+=pvx*h; py+=pvy*h; const g2=gravAt(px,py,null); pvx+=g2.ax*h*0.5; pvy+=g2.ay*h*0.5;
+        if (i%2===0) pts.push({x:px,y:py});
+        if (px<-W||px>2*W||py<-H||py>2*H) break;
+      }
+      return pts;
+    }
+
+    // --- プリセット天体系 ---
+    function circular(cx,cy, sun, R, dir, m, sf){   // 中心sunのまわりに 惑星を置く（sf<1で楕円＝ケプラーの色が出る）
+      const v=Math.sqrt(G*sun.m/R)*(sf||1);
+      const b=addBody(cx+R, cy, 0, -v*dir, m||6, false);
+      return b;
+    }
+    function loadSystem(sys){
+      curSys=sys; bodies=[]; flashes=[]; pcIdx=0; smax=9;
+      const cx=0.5*W, cy=0.5*H, u=Math.min(W,H);
+      if (sys==="sun1"){
+        const sun=addBody(cx,cy,0,0,6000,true);
+        circular(cx,cy,sun,0.34*u,1,8,0.78);   // 楕円軌道：遠日点(青)→近日点(赤)
+      } else if (sys==="binary"){
+        const D=0.30*u, Ms=3200; const v=Math.sqrt(G*Ms/(2*D));
+        addBody(cx-D/2, cy, 0, -v, Ms, true, "#ffd36b");
+        addBody(cx+D/2, cy, 0,  v, Ms, true, "#ff9d6b");
+        // 連星の外側を まわる わくせい
+        const vr=Math.sqrt(G*(2*Ms)/(0.46*u));
+        addBody(cx, cy-0.46*u, vr, 0, 6, false, "#8bffb0");
+      } else if (sys==="many"){
+        const sun=addBody(cx,cy,0,0,7000,true);
+        const rs=[0.16,0.24,0.33,0.43,0.54];
+        for (let i=0;i<rs.length;i++) circular(cx,cy,sun, rs[i]*u, 1, 4+i, 0.86+0.03*i);  // 少し楕円で色が出る
+      } else { /* empty: 太陽だけ置いて 自由に飛ばす */
+        addBody(cx,cy,0,0,6000,true);
+      }
+    }
+
+    // --- 描画 ---
+    function arrow(x,y,dx,dy,color){
+      const l=Math.hypot(dx,dy); if (l<4) return; const ux=dx/l, uy=dy/l;
+      ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=2.5; ctx.lineCap="round";
+      ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+dx,y+dy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+dx,y+dy);
+      ctx.lineTo(x+dx-ux*10+uy*5, y+dy-uy*10-ux*5);
+      ctx.lineTo(x+dx-ux*10-uy*5, y+dy-uy*10+ux*5); ctx.closePath(); ctx.fill();
+    }
+    function draw(){
+      ctx.fillStyle="#06080f"; ctx.fillRect(0,0,W,H);
+      for (const s of stars){ ctx.globalAlpha=s.a; ctx.fillStyle="#cdd8ff"; ctx.fillRect(s.x,s.y,s.r,s.r); }
+      ctx.globalAlpha=1;
+      // 軌道トレイル（にじいろ＝速さ：近日点で赤・遠日点で青）
+      for (const b of bodies){ const t=b.trail; if (t.length<2) continue;
+        ctx.lineWidth=2.2; ctx.lineCap="round";
+        for (let i=1;i<t.length;i++){ ctx.globalAlpha=(i/t.length)*0.9;
+          ctx.strokeStyle=speedColor((t[i].sp+t[i-1].sp)*0.5);
+          ctx.beginPath(); ctx.moveTo(t[i-1].x,t[i-1].y); ctx.lineTo(t[i].x,t[i].y); ctx.stroke(); }
+      }
+      ctx.globalAlpha=1;
+      // 合体エフェクト
+      for (const f of flashes){ const rr=f.r*(1+f.t*3);
+        ctx.globalAlpha=(1-f.t)*0.8; ctx.strokeStyle="#fff2b0"; ctx.lineWidth=3;
+        ctx.beginPath(); ctx.arc(f.x,f.y,rr,0,Math.PI*2); ctx.stroke(); }
+      ctx.globalAlpha=1;
+      // 天体
+      for (const b of bodies){
+        if (b.sun){ const g=ctx.createRadialGradient(b.x,b.y,2,b.x,b.y,b.r*3.2);
+          g.addColorStop(0,"rgba(255,240,170,.9)"); g.addColorStop(0.3,"rgba(255,210,70,.5)"); g.addColorStop(1,"rgba(255,180,40,0)");
+          ctx.fillStyle=g; ctx.beginPath(); ctx.arc(b.x,b.y,b.r*3.2,0,Math.PI*2); ctx.fill(); }
+        const bg=ctx.createRadialGradient(b.x-b.r*0.3,b.y-b.r*0.35,b.r*0.2,b.x,b.y,b.r);
+        bg.addColorStop(0,"#ffffff"); bg.addColorStop(0.25,b.color); bg.addColorStop(1, b.sun?"#d98b1a":"#223");
+        ctx.fillStyle=bg; ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fill();
+      }
+      // 力・速度ベクトル
+      if (showForces){
+        for (const b of bodies){ if (b.sun) continue;
+          const g=gravAt(b.x,b.y,b); const gl=Math.hypot(g.ax,g.ay)||1;
+          arrow(b.x,b.y, g.ax/gl*34, g.ay/gl*34, "#ff6a6a");               // 万有引力（中心へ）
+          arrow(b.x,b.y, b.vx*5, b.vy*5, "#7dff9b");                       // 速度（接線）
+        }
+      }
+      // スリングショット（引っ張り中）
+      if (sling.active){
+        const vx=(sling.cur.x-sling.start.x)*SLINGK, vy=(sling.cur.y-sling.start.y)*SLINGK;
+        const pts=predict(sling.start.x, sling.start.y, vx, vy);
+        ctx.setLineDash([5,6]); ctx.strokeStyle="rgba(255,255,255,.55)"; ctx.lineWidth=2;
+        ctx.beginPath(); for (let i=0;i<pts.length;i++){ i?ctx.lineTo(pts[i].x,pts[i].y):ctx.moveTo(pts[i].x,pts[i].y); } ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle="#7cc6ff"; ctx.beginPath(); ctx.arc(sling.start.x,sling.start.y,7,0,Math.PI*2); ctx.fill();
+        arrow(sling.start.x, sling.start.y, vx*5, vy*5, "#ffd43b");        // 発射ベクトル
+      }
+      // ラベル
+      ctx.fillStyle="rgba(255,255,255,.75)"; ctx.font="bold 13px sans-serif"; ctx.textAlign="left";
+      ctx.fillText("ほし: "+bodies.length+"こ"+(paused?"（とまってる）":""), 12, 22);
+      ctx.fillStyle="rgba(255,255,255,.5)"; ctx.font="bold 11px sans-serif";
+      ctx.fillText("トレイルの色＝はやさ（赤=はやい・近日点／青=おそい・遠日点）", 12, 40);
+    }
+
+    // --- ループ ---
+    let running=true;
+    function frame(){ if (!running) return;
+      TIME=performance.now()/1000;
+      if (!paused && !sling.active) step();
+      draw();
+      requestAnimationFrame(frame);
+    }
+
+    // --- リサイズ ---
+    function fitCanvas(){
+      const rect=canvas.getBoundingClientRect();
+      W=rect.width; H=rect.height; DPR=Math.min(2, window.devicePixelRatio||1);
+      canvas.width=Math.round(W*DPR); canvas.height=Math.round(H*DPR);
+      ctx.setTransform(DPR,0,0,DPR,0,0); mkStars();
+      loadSystem(curSys);
+    }
+
+    // --- 入力（スリングショット）---
+    const SLINGK=0.05;
+    let sling={active:false, start:{x:0,y:0}, cur:{x:0,y:0}};
+    function pos(e){ const r=canvas.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
+    canvas.addEventListener("pointerdown",(e)=>{ e.preventDefault();
+      sling.active=true; sling.start=pos(e); sling.cur=sling.start; canvas.setPointerCapture(e.pointerId); });
+    canvas.addEventListener("pointermove",(e)=>{ if (sling.active) sling.cur=pos(e); });
+    function release(e){ if (!sling.active) return; sling.active=false;
+      const vx=(sling.cur.x-sling.start.x)*SLINGK, vy=(sling.cur.y-sling.start.y)*SLINGK;
+      const drag=Math.hypot(sling.cur.x-sling.start.x, sling.cur.y-sling.start.y);
+      addBody(sling.start.x, sling.start.y, vx, vy, 6, false);   // 引っ張った向きに発射（止めてもその場に置ける）
+      void drag;
+      try{ canvas.releasePointerCapture(e.pointerId);}catch(_){}
+    }
+    canvas.addEventListener("pointerup",release);
+    canvas.addEventListener("pointercancel",release);
+
+    // --- UI ---
+    const TIPS={
+      sun1:"太陽のまわりを 地球が ぐるぐる。画面を 引っ張って はなすと、新しい ほしを 発射！（点線＝予想コース）",
+      binary:"ふたごの 太陽が おたがいを まわる「連星」。そのまわりに ほしを 飛ばすと フラフラ ふくざつな軌道に。",
+      many:"太陽と たくさんの わくせい。内側ほど 速く まわる（ケプラー）。ほしを足したり ぶつけて 合体させよう。",
+      empty:"太陽だけ。画面を 引っ張って はなして、自分だけの 星を たくさん 飛ばそう。ぶつかると 合体するよ。"
+    };
+    function setTip(){ tipEl.textContent=TIPS[curSys]; }
+    document.querySelectorAll("[data-sys]").forEach(tab=>tab.addEventListener("click",()=>{
+      document.querySelectorAll("[data-sys]").forEach(t=>t.classList.toggle("active",t===tab));
+      loadSystem(tab.dataset.sys); setTip();
+    }));
+    document.getElementById("forceBtn").addEventListener("click",(e)=>{ showForces=!showForces; e.currentTarget.classList.toggle("on",showForces); });
+    const pauseBtn=document.getElementById("pauseBtn");
+    pauseBtn.addEventListener("click",()=>{ paused=!paused; pauseBtn.classList.toggle("on",paused);
+      pauseBtn.textContent=paused?"▶️ うごかす":"⏸️ とめる"; });
+    document.getElementById("resetBtn").addEventListener("click",()=>{ loadSystem(curSys); });
+
+    document.addEventListener("visibilitychange",()=>{ running=!document.hidden; if (running) frame(); });
+    window.addEventListener("resize", fitCanvas);
+    window.addEventListener("load",()=>{ fitCanvas(); setTip(); });
+
+    fitCanvas(); setTip(); frame();
+  })();
+
+  if ("serviceWorker" in navigator) { navigator.serviceWorker.register("/service-worker.js").catch(()=>{}); }
+  </script>
+</body>
+</html>

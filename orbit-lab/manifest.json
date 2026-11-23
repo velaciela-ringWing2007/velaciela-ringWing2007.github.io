@@ -1,0 +1,18 @@
+{
+  "name": "おほしさま ぐるぐる",
+  "short_name": "おほしさま",
+  "description": "万有引力で星がまわる軌道シミュレーション。スリングショットで星を発射し、連星や多惑星系、ケプラーの法則を遊びながら学べる子供向けアプリ",
+  "start_url": "/orbit-lab/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0e1a",
+  "theme_color": "#06080f",
+  "icons": [
+    {
+      "src": "../icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
