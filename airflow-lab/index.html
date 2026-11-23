@@ -91,10 +91,43 @@
     const dot=(a,b)=>a.x*b.x+a.y*b.y, perp=a=>({x:-a.y,y:a.x});
     const clamp=(v,a,b)=>v<a?a:v>b?b:v;
     const lerp=(a,b,t)=>a+(b-a)*t;
-    function speedColor(sp, smax){ // おそい=青, はやい=白っぽい水色
+    // 速さ→色（おそい 青 → 水 → 緑 → 黄 → はやい 赤）
+    const SPEED_STOPS = [[40,110,255],[0,200,235],[90,220,90],[250,215,40],[255,70,40]];
+    function speedColor(sp, smax){
       const t = clamp(sp/smax,0,1);
-      const r=Math.round(lerp(70,230,t)), g=Math.round(lerp(140,245,t)), b=Math.round(lerp(255,255,t));
-      return "rgb("+r+","+g+","+b+")";
+      const x = t*(SPEED_STOPS.length-1), i = Math.min(SPEED_STOPS.length-2, Math.floor(x)), f = x-i;
+      const a=SPEED_STOPS[i], b=SPEED_STOPS[i+1];
+      return "rgb("+Math.round(a[0]+(b[0]-a[0])*f)+","+Math.round(a[1]+(b[1]-a[1])*f)+","+Math.round(a[2]+(b[2]-a[2])*f)+")";
+    }
+    // 速さで区間ごとに色を変えて折れ線を描く（色は8段階にまとめて軽量化）
+    function drawSpeedPolyline(getPt, n, smax, lw){
+      if (n<2) return;
+      const B=8, buckets=[];
+      for (let k=0;k<B;k++) buckets.push([]);
+      for (let i=1;i<n;i++){
+        const a=getPt(i-1), b=getPt(i);
+        const sp=(a.sp+b.sp)*0.5;
+        const bi=Math.min(B-1, Math.max(0, Math.floor(clamp(sp/smax,0,1)*B)));
+        buckets[bi].push(a,b);
+      }
+      ctx.lineWidth=lw; ctx.lineCap="round"; ctx.globalAlpha=0.9;
+      for (let bi=0;bi<B;bi++){
+        const segs=buckets[bi]; if (!segs.length) continue;
+        ctx.strokeStyle=speedColor((bi+0.5)/B*smax, smax);
+        ctx.beginPath();
+        for (let k=0;k<segs.length;k+=2){ ctx.moveTo(segs[k].x,segs[k].y); ctx.lineTo(segs[k+1].x,segs[k+1].y); }
+        ctx.stroke();
+      }
+      ctx.globalAlpha=1;
+    }
+    // 凡例（色バー）
+    function drawLegend(){
+      const w=104, h=10, x=W-w-16, y=14;
+      for (let i=0;i<w;i++){ ctx.fillStyle=speedColor(i/w,1); ctx.fillRect(x+i,y,1,h); }
+      ctx.strokeStyle="rgba(255,255,255,.35)"; ctx.lineWidth=1; ctx.strokeRect(x+0.5,y+0.5,w,h);
+      ctx.fillStyle="rgba(255,255,255,.85)"; ctx.font="bold 11px sans-serif";
+      ctx.textAlign="left"; ctx.fillText("おそい", x, y+h+12);
+      ctx.textAlign="right"; ctx.fillText("はやい", x+w, y+h+12);
     }
     // 渦（うず）による速度。vortices: [{x,y,G,core}]
     function vortexVel(pt, vortices){
@@ -203,12 +236,12 @@
         const vo = vortexVel(pt, this.vortices);
         let v = { x: j.x+vo.x, y: j.y+vo.y };
         const d = sub(pt, this.ball), dist = len(d);
-        const infl = this.BALLR*2.0;
+        const infl = this.BALLR*1.5;               // 物体の近くだけ 回り込ませる（密着）
         if (dist < infl && dist > 0.5) {
           const n = mul(d, 1/dist);
           const vn = dot(v, n);
           if (vn < 0) v = sub(v, mul(n, vn));      // 中へ入らず回り込む
-          v = mul(v, 1 + 0.35*(1 - dist/infl));    // 横で加速
+          v = mul(v, 1 + 0.45*(1 - dist/infl));    // 横で加速
         }
         return v;
       },
@@ -275,18 +308,12 @@
         const g = ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,"#0d1324"); g.addColorStop(1,"#141b2e");
         ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
         ctx.fillStyle="#232b40"; ctx.fillRect(0,this.floorY,W,H-this.floorY);
-        // 空気の流れ（ながれせん or つぶつぶ）
+        // 空気の流れ（ながれせん or つぶつぶ）。速さで色が変わる
         if (flowStyle==="stream"){
-          ctx.lineCap="round"; ctx.lineJoin="round";
           for (const line of this.lines){
-            if (line.pts.length<2) continue;
-            ctx.strokeStyle = speedColor(line.avg, this.U0*1.1);
-            ctx.globalAlpha = 0.85; ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.moveTo(line.pts[0].x, line.pts[0].y);
-            for (let i=1;i<line.pts.length;i++) ctx.lineTo(line.pts[i].x, line.pts[i].y);
-            ctx.stroke();
+            const pts=line.pts; if (pts.length<2) continue;
+            drawSpeedPolyline(i=>pts[i], pts.length, this.U0*1.1, 2);
           }
-          ctx.globalAlpha=1;
         } else {
           drawTrails(this.parts, this.U0*1.1);
         }
@@ -351,10 +378,12 @@
     };
 
     // =====================================================================
-    // ✈️ 翼の揚力（円柱＋循環のポテンシャル流で流線）
+    // ✈️ 翼まわりの流れ（翼の実形状に沿わせる方式）
+    //   ・一様な水平風を、翼ポリゴンの表面に「沿う」よう近くだけ曲げる
+    //   ・下面は ほぼ直線／上面は 翼なりに曲がり＆加速、後方で 剥離
     // =====================================================================
     const WG = {
-      UINF: 2.4, R: 62, GFAC: 2.2, CAMBER: 0.10, alpha: 0.18, center: null, lines: [], parts: [],
+      UINF: 2.4, R: 62, CAMBER: 0.10, alpha: 0.18, center: null, lines: [], parts: [], poly: [],
       make() {
         this.center = { x: 0.44*W, y: 0.5*H };
         this.alpha = 0.18;
@@ -362,37 +391,75 @@
         this.retrace();
       },
       chord(){ return this.R*1.9; },
-      gamma(){ return this.GFAC * this.UINF * this.R * (Math.sin(this.alpha) + this.CAMBER); },
-      field(pt) {
-        // 一様流は つねに 水平(+x)。翼まわりは 円柱＋循環（キャンバーぶんの循環も含む）。
-        const d = sub(pt, this.center);
-        const r = Math.hypot(d.x,d.y), rr = Math.max(r, this.R);
-        const th = Math.atan2(d.y, d.x), U = this.UINF;
-        const vr = U*(1 - this.R*this.R/(rr*rr))*Math.cos(th);
-        const vt = -U*(1 + this.R*this.R/(rr*rr))*Math.sin(th) + this.gamma()/(2*Math.PI*rr);
-        return { x: vr*Math.cos(th) - vt*Math.sin(th), y: vr*Math.sin(th) + vt*Math.cos(th) };
+      gamma(){ return this.UINF * this.R * (Math.sin(this.alpha) + this.CAMBER); }, // 揚力矢印の目安
+      buildPoly() {
+        const c=this.center, ch=this.chord(), ca=Math.cos(this.alpha), sa=Math.sin(this.alpha);
+        this.poly = AIRFOIL.map(q=>{ const X=q.x*ch, Y=-q.y*ch; return { x:c.x + X*ca - Y*sa, y:c.y + X*sa + Y*ca }; });
       },
-      retrace() {   // 止まった流線を引き直す（迎え角を変えると形が変わる）
-        this.lines = [];
-        const ys = [];
-        for (let i=0;i<10;i++) ys.push(H*(0.05 + 0.9*i/9));                 // 全体に うっすら
-        const band = 2.5*this.R;
-        for (let i=0;i<20;i++) ys.push(clamp(this.center.y - band + 2*band*i/19, 4, H-4)); // 翼の近くは 密に
-        for (const y of ys){
-          const pts = streamline(p=>this.field(p), {x:2, y}, 6, 200);
-          let avg=0; for (const q of pts) avg+=q.sp; avg/=(pts.length||1);
-          this.lines.push({ pts, avg, k:this.lines.length*0.7 });
+      chordY(pt){ const dx=pt.x-this.center.x, dy=pt.y-this.center.y; return -dx*Math.sin(this.alpha)+dy*Math.cos(this.alpha); }, // <0 上面側
+      pointInPoly(p){
+        const poly=this.poly; let inside=false;
+        for (let i=0,j=poly.length-1;i<poly.length;j=i++){
+          const a=poly[i], b=poly[j];
+          if (((a.y>p.y)!==(b.y>p.y)) && (p.x < (b.x-a.x)*(p.y-a.y)/((b.y-a.y)||1e-9)+a.x)) inside=!inside;
         }
+        return inside;
       },
-      // つぶつぶ（流れる粒）。剥離域では時間で揺れる
-      flowVel(pt) {
+      nearest(p){   // 翼輪郭への最近点・外向き法線・距離・内外
+        const poly=this.poly; let best=1e18, qx=0, qy=0;
+        for (let i=0;i<poly.length;i++){
+          const a=poly[i], b=poly[(i+1)%poly.length];
+          const abx=b.x-a.x, aby=b.y-a.y; const d2=abx*abx+aby*aby||1;
+          let t=((p.x-a.x)*abx+(p.y-a.y)*aby)/d2; t=t<0?0:t>1?1:t;
+          const cx=a.x+abx*t, cy=a.y+aby*t; const dx=p.x-cx, dy=p.y-cy; const dd=dx*dx+dy*dy;
+          if (dd<best){ best=dd; qx=cx; qy=cy; }
+        }
+        const dist=Math.sqrt(best); let nx=(p.x-qx)/(dist||1), ny=(p.y-qy)/(dist||1);
+        const inside=this.pointInPoly(p); if (inside){ nx=-nx; ny=-ny; }
+        return { dist, nx, ny, inside };
+      },
+      field(pt) {
+        const U=this.UINF; const na=this.nearest(pt);
+        if (na.inside) return { x:U*0.4 + na.nx*U*0.6, y:na.ny*U*0.6 };  // 中なら外へ
+        let vx=U, vy=0;
+        const band=this.R*0.95;
+        if (na.dist<band){
+          const w0=1 - na.dist/band, w=w0*w0*(3-2*w0);   // smoothstep
+          const sep=this.sepFactor(pt);
+          const follow=w*(1-sep);
+          // 表面にそう接線（下流むき）
+          let tx=-na.ny, ty=na.nx; if (tx<0){ tx=-tx; ty=-ty; }
+          // 方向を 一様(1,0)→接線 へ ブレンド（＝表面に沿う）
+          let dx=(1-follow)+follow*tx, dy=follow*ty; const dl=Math.hypot(dx,dy)||1; dx/=dl; dy/=dl;
+          // 速さ：上面は加速（＝色が赤くなる・循環のかわり）、下面は少し減速
+          const upper = this.chordY(pt) < 0;
+          const spd = upper ? U*(1 + (Math.sin(this.alpha)+this.CAMBER+0.20)*1.9*follow)
+                            : U*(1 - 0.12*follow);
+          vx=dx*spd; vy=dy*spd;
+        }
+        return { x:vx, y:vy };
+      },
+      // つぶつぶ用：剥離域は時間で揺らす
+      flowVel(pt){
         const v=this.field(pt); const s=this.sepFactor(pt);
         if (s>0){ const u=norm(v), nrm=perp(u); const w=Math.sin(TIME*9 + pt.x*0.06 + pt.y*0.05)*this.UINF*1.0*s; return { x:v.x+nrm.x*w, y:v.y+nrm.y*w }; }
         return v;
       },
+      retrace() {   // 翼ポリゴンを作り直し、流線を引き直す
+        this.buildPoly();
+        this.lines = [];
+        const ys = [];
+        for (let i=0;i<9;i++) ys.push(H*(0.05 + 0.9*i/8));                  // 全体に うっすら
+        const band = 2.3*this.R;
+        for (let i=0;i<18;i++) ys.push(clamp(this.center.y - band + 2*band*i/17, 4, H-4)); // 翼の近くは 密に
+        for (const y of ys){
+          const pts = streamline(p=>this.field(p), {x:2, y}, 7, 150);
+          this.lines.push({ pts, k:this.lines.length*0.7 });
+        }
+      },
       seedP(start) {
         let y;
-        if (Math.random()<0.6) y=this.center.y + (Math.random()*2-1)*2.5*this.R;  // 翼の近くに 多め
+        if (Math.random()<0.65) y=this.center.y + (Math.random()*2-1)*2.3*this.R; // 翼の近くに 多め
         else y=Math.random()*H;
         y=clamp(y,2,H-2);
         return { x: start? Math.random()*W : -4, y, trail:[], life:Math.random()*120, sp:0 };
@@ -402,53 +469,46 @@
         for (let i=0;i<this.parts.length;i++){
           const pt=this.parts[i];
           for (let k=0;k<2;k++){ const v=this.flowVel(pt); pt.x+=v.x*1.1; pt.y+=v.y*1.1; pt.sp=len(v); }
-          const d=sub(pt,this.center), r=Math.hypot(d.x,d.y);
-          if (r<this.R){ const n=mul(d,1/(r||1)); pt.x=this.center.x+n.x*this.R; pt.y=this.center.y+n.y*this.R; }
+          const na=this.nearest(pt);
+          if (na.inside){ pt.x += na.nx*(na.dist+2); pt.y += na.ny*(na.dist+2); }   // 翼から押し出す
           pt.life++;
           pt.trail.push({x:pt.x,y:pt.y}); if(pt.trail.length>6) pt.trail.shift();
           if (pt.x>W+4||pt.y<-30||pt.y>H+30||pt.life>500) this.parts[i]=this.seedP(false);
         }
       },
-      // 上面うしろの「剥離域」だけ 0..1。ここだけ ぷるぷる させる
+      // 上面うしろの「剥離域」だけ 0..1
       sepFactor(pt) {
         const deg=Math.abs(this.alpha*180/Math.PI);
-        const base=clamp((deg-11)/15,0,1);
-        if (base<=0) return 0;
+        const base=clamp((deg-11)/15,0,1); if (base<=0) return 0;
         const dx=pt.x-this.center.x, dy=pt.y-this.center.y;
         const ca=Math.cos(this.alpha), sa=Math.sin(this.alpha);
-        const wx = dx*ca + dy*sa;     // 下流 +
-        const wy = -dx*sa + dy*ca;    // >0 下面 / <0 上面(canvas上)
-        if (wy > -0.05*this.R) return 0;            // 上面だけ
-        const xi = (wx + 0.2*this.R)/(3.4*this.R);  // 翼なかほど〜後流
-        if (xi<0 || xi>1) return 0;
-        const yf = clamp(1-(-wy)/(1.4*this.R),0,1);
-        return base * clamp(xi*1.4,0,1) * yf;
+        const wx = dx*ca + dy*sa, wy = -dx*sa + dy*ca;    // wy<0 上面
+        if (wy > -0.02*this.R) return 0;
+        const xi = (wx + 0.1*this.R)/(2.6*this.R); if (xi<0 || xi>1) return 0;
+        const yf = clamp(1-(-wy)/(1.3*this.R),0,1);
+        return base * clamp(xi*1.5,0,1) * yf;
       },
-      update() {},   // 流線は静止。剥離の ぷるぷる は draw で時間変化
+      update() {},
       draw() {
         const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,"#0c1426"); g.addColorStop(1,"#0f1a30");
         ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
-        const smax=this.UINF*2.4;
+        const smax=this.UINF*2.2;
         if (flowStyle==="stream"){
-          ctx.lineCap="round"; ctx.lineJoin="round";
           for (const line of this.lines){
             const pts=line.pts; if (pts.length<2) continue;
-            ctx.strokeStyle=speedColor(line.avg, smax); ctx.globalAlpha=0.85; ctx.lineWidth=1.8;
-            ctx.beginPath();
+            // 剥離域だけ 波打たせた座標を作る
+            const op=new Array(pts.length);
             for (let i=0;i<pts.length;i++){
-              let X=pts[i].x, Y=pts[i].y;
-              const s=this.sepFactor(pts[i]);
-              if (s>0){   // 剥離域だけ 波打たせる
+              let X=pts[i].x, Y=pts[i].y; const s=this.sepFactor(pts[i]);
+              if (s>0){
                 const a=pts[Math.min(i+1,pts.length-1)], b=pts[Math.max(i-1,0)];
                 let dx=a.x-b.x, dy=a.y-b.y; const l=Math.hypot(dx,dy)||1; dx/=l; dy/=l;
-                const w = Math.sin(TIME*9 + i*0.5 + line.k) * 11 * s;
-                X += -dy*w; Y += dx*w;
+                const w=Math.sin(TIME*9 + i*0.5 + line.k)*11*s; X+=-dy*w; Y+=dx*w;
               }
-              i?ctx.lineTo(X,Y):ctx.moveTo(X,Y);
+              op[i]={x:X,y:Y,sp:pts[i].sp};
             }
-            ctx.stroke();
+            drawSpeedPolyline(i=>op[i], op.length, smax, 1.9);
           }
-          ctx.globalAlpha=1;
         } else {
           drawTrails(this.parts, smax);
         }
@@ -467,7 +527,7 @@
         ctx.fillStyle="rgba(255,255,255,.75)"; ctx.font="bold 13px sans-serif"; ctx.textAlign="left";
         ctx.fillText("つばさの かくど: "+deg.toFixed(0)+"°", 12, 22);
         if (showForces){
-          const Lp=Math.min(130, Math.abs(this.gamma())*0.5);
+          const Lp=Math.min(130, Math.abs(this.gamma())*2.2);
           if (Lp>4) arrow(c, {x:c.x, y:c.y-Lp}, "#7dff9b", "ようりょく");
         }
         if (deg>13){
@@ -514,6 +574,7 @@
         if (flowStyle==="dots") sc.stepParts();
       }
       sc.draw();
+      drawLegend();
       requestAnimationFrame(frame);
     }
 
