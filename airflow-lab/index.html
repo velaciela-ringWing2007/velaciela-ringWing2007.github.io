@@ -158,6 +158,18 @@
       ctx.globalAlpha=1;
     }
 
+    // 流線のギザギザを ならす（端点は固定・速度spは保持）
+    function smoothPts(pts, passes){
+      if (!pts || pts.length<3) return pts;
+      for (let s=0;s<passes;s++){
+        let px={x:pts[0].x,y:pts[0].y};
+        for (let i=1;i<pts.length-1;i++){
+          const nx=(px.x + 2*pts[i].x + pts[i+1].x)/4, ny=(px.y + 2*pts[i].y + pts[i+1].y)/4;
+          px={x:pts[i].x,y:pts[i].y}; pts[i].x=nx; pts[i].y=ny;
+        }
+      }
+      return pts;
+    }
     // 流線（ストリームライン）を1本トレース。各点に局所速度 sp を持たせる
     function streamline(fieldFn, seed, step, maxSteps){
       const pts=[]; let p={x:seed.x,y:seed.y};
@@ -518,16 +530,32 @@
           ctx.stroke();
         }
       },
+      // 翼面のすぐ外側に種点を置く（法線方向に翼から出て +skim だけ外へ）
+      skimSeed(frac, sideUp, skim){
+        const ch=this.chord(), ca=Math.cos(this.alpha), sa=Math.sin(this.alpha);
+        const base={ x:this.center.x+(frac-0.5)*ch*ca, y:this.center.y+(frac-0.5)*ch*sa }; // コード線上の点
+        const n = sideUp ? {x:sa, y:-ca} : {x:-sa, y:ca};   // 翼面の外向き法線（上/下）
+        let d=0; while (d<36 && this.pointInPoly({x:base.x+n.x*d, y:base.y+n.y*d})) d+=1; // 翼の外に出るまで
+        const off=d+skim;
+        return { x:base.x+n.x*off, y:base.y+n.y*off };
+      },
       retrace() {   // 翼ポリゴンを作り直し、流線を引き直す
         this.buildPoly();
         this.lines = [];
         const ys = [];
         for (let i=0;i<9;i++) ys.push(H*(0.05 + 0.9*i/8));                  // 全体に うっすら
-        const band = 2.3*this.R;
-        for (let i=0;i<18;i++) ys.push(clamp(this.center.y - band + 2*band*i/17, 4, H-4)); // 翼の近くは 密に
+        const band = 2.0*this.R;
+        for (let i=0;i<16;i++) ys.push(clamp(this.center.y - band + 2*band*i/15, 4, H-4)); // 翼の近くは 密に
+        const nStep = Math.ceil(W/7) + 20;   // 画面の端まで届く長さ（翼まで線が途切れない）
         for (const y of ys){
-          const pts = streamline(p=>this.field(p), {x:2, y}, 7, 150);
+          const pts = smoothPts(streamline(p=>this.field(p), {x:2, y}, 7, nStep), 1);
           this.lines.push({ pts, k:this.lines.length*0.7 });
+        }
+        // 翼面にぴったり添う線（前縁のすぐ上／下から、翼面をなめるように流す）
+        const nSkim = Math.ceil(W/4);
+        for (const skim of [4, 11, 19]){
+          this.lines.push({ pts: smoothPts(streamline(p=>this.field(p), this.skimSeed(0.03, true,  skim), 4, nSkim), 3), k:this.lines.length*0.7 });
+          this.lines.push({ pts: smoothPts(streamline(p=>this.field(p), this.skimSeed(0.03, false, skim), 4, nSkim), 3), k:this.lines.length*0.7 });
         }
       },
       seedP(start) {
