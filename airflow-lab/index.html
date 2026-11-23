@@ -402,7 +402,7 @@
         this.alpha = 0.18;
         const ch=this.chord(), ca=Math.cos(this.alpha), sa=Math.sin(this.alpha);
         this.pivot = { x:this.center.x - 0.5*ch*ca, y:this.center.y - 0.5*ch*sa }; // 前縁を回転の支点に固定
-        this.parts = []; this.shed = []; this.spawnT = 0;
+        this.parts = []; this.shed = []; this.spawnT = 0; this.wakeLines = [];
         this.retrace();
       },
       chord(){ return this.R*1.9; },
@@ -454,8 +454,9 @@
         const L=0.7*ch, reach=this.R*1.7;
         const s=(wx/L)*Math.exp(-0.5*(wx/L)*(wx/L));           // 前(<0)=上向き / 後(>0)=下向き
         const yf=Math.exp(-(wy*wy)/(reach*reach));
-        const sepCut=1-0.8*this.sepFactor(pt);                 // 剥離域は押し下げない
-        return g*U*1.6*s*yf*sepCut;                            // 画面+y=下向き
+        const sepCut=1-0.95*this.sepFactor(pt);                // 剥離域は押し下げない（揚力喪失）
+        const fwd = wx < -0.3*ch ? clamp(1 + (wx+0.3*ch)/(0.9*this.R), 0.3, 1) : 1; // 前方は アップウォッシュ控えめ＝真っ直ぐ寄せる
+        return g*U*1.6*s*yf*sepCut*fwd;                        // 画面+y=下向き
       },
       field(pt) {
         const U=this.UINF, ch=this.chord(); const naF=this.nearest(pt);
@@ -465,14 +466,14 @@
         const wx=dx*ca+dy*sa, wy=-dx*sa+dy*ca;          // 翼座標（wx:下流, wy<0:上面）
         const upper = wy < 0;
         const na = this.nearest(pt, upper?"up":"lo");   // 上の点は上面だけ・下の点は下面だけ
+        const sep = this.sepFactor(pt);                 // 剥離度（吸い込み面・分離点より後ろで>0）
         let vx=U, vy=0;
         const band=this.R*0.95;
         // 前縁より前では 分岐を弱める → よどみ点が前縁の先端に来る（手前でカクッと割れない）
         const aheadFade = clamp(1 + (wx + 0.5*ch)/(0.5*this.R), 0, 1);
         if (na.dist<band){
           const w0=1 - na.dist/band, w=w0*w0*(3-2*w0);   // smoothstep
-          const sep=this.sepFactor(pt);
-          const follow=w*(1-sep)*aheadFade;
+          const follow=w*(1-sep)*aheadFade;              // 剥離域は 翼面に沿わせない（＝浮く）
           // 表面にそう接線（下流むき）
           let tx=-na.ny, ty=na.nx; if (tx<0){ tx=-tx; ty=-ty; }
           // 後縁に近づくほど 接線を翼弦方向へ寄せる（上下が後縁で滑らかに合流＝クッタ条件風）
@@ -487,9 +488,18 @@
           vx=ddx*spd; vy=ddy*spd;
         }
         vy += this.downwash(pt);   // 前で上がり・後ろで下へ（翼が空気を下へ押す）
-        // なめらかな反発場（非貫通）：近いほど内向き成分を除去＝ゆるくカーブして先端で分かれる
+        // 剥離（失速）：上面の流れを 翼背から浮かせて まっすぐ後ろ〜やや上へ。死水で うねり（カルマン渦列風）
+        if (sep > 0){
+          const sgn = this.sucUp()? -1 : 1;              // 吸い込み面の「浮く」向き（上面＝上=-y）
+          const depth = this.sucUp()? -wy : wy;
+          vy += sgn * U * 0.12 * sep;                    // やや上向きに 浮く
+          const near = clamp(1 - depth/(1.3*this.R), 0, 1);   // 翼背に近いほど（死水域）
+          vy += sgn * U * 0.55 * sep * near * Math.sin(wx/(0.4*this.R)*Math.PI - TIME*2.4); // 交互の うねり
+        }
+        // なめらかな反発場（非貫通）：近いほど内向き成分を除去＝ゆるくカーブして先端で分かれる。
+        // ただし剥離域では弱める＝翼背を回り込まず まっすぐ浮いて飛ぶ
         if (naF.dist < this.R*0.8){
-          const wg=1 - clamp(naF.dist/(this.R*0.8), 0, 1), wsm=wg*wg*(3-2*wg);
+          const wg=1 - clamp(naF.dist/(this.R*0.8), 0, 1), wsm=wg*wg*(3-2*wg)*(1-0.9*sep);
           const vn = vx*naF.nx + vy*naF.ny;
           if (vn < 0){ vx -= naF.nx*vn*wsm; vy -= naF.ny*vn*wsm; }
         }
@@ -577,17 +587,28 @@
         let lo=this.center.y-1.4*this.R, hi=this.center.y+1.4*this.R, sLo=sideAt(lo), sHi=sideAt(hi);
         if (sLo*sHi < 0){ for (let it=0;it<16;it++){ const mid=(lo+hi)/2, sm=sideAt(mid); if (sm*sLo<=0){hi=mid;sHi=sm;} else {lo=mid;sLo=sm;} } }
         let sPts=streamline(p=>this.field(p), {x:2, y:(lo+hi)/2}, 6, Math.ceil(W/6));
-        let cut=sPts.length, best=1e18;
-        for (let i=0;i<sPts.length;i++){ const d=Math.hypot(sPts[i].x-nose.x, sPts[i].y-nose.y); if (d<best){ best=d; cut=i+1; } }
-        sPts=sPts.slice(0,cut);
-        const ep=sPts[sPts.length-1], na=this.nearest(ep);           // 実際の翼面（よどみ点）にスナップ
-        sPts.push({x: ep.x - na.nx*na.dist, y: ep.y - na.ny*na.dist, sp:0});
-        this.lines.push({ pts: smoothPts(sPts,3), k:this.lines.length*0.7, stag:true }); // よどみ線（明るく描く）
+        // 先端の0.45R手前で止めて、まっすぐ先端へ（手前での よどみの クネリ・重なりを防ぐ）
+        let cut=sPts.length;
+        for (let i=0;i<sPts.length;i++){ if (Math.hypot(sPts[i].x-nose.x, sPts[i].y-nose.y) < 0.45*this.R){ cut=i; break; } }
+        sPts=sPts.slice(0, Math.max(2,cut));
+        sPts.push({x:nose.x, y:nose.y, sp:0});                       // 先端（よどみ点）へ直線で
+        this.lines.push({ pts: smoothPts(sPts,2), k:this.lines.length*0.7, stag:true }); // よどみ線（明るく描く）
         // 翼面にぴったり添う線（前縁のすぐ上／下から出して、翼面をなめるように流す＝前縁で分かれる）
         const nSkim = Math.ceil(W/4);
         for (const skim of [2, 9, 16]){
           this.lines.push({ pts: smoothPts(streamline(p=>this.field(p), this.skimSeed(0.0, true,  skim), 4, nSkim), 3), k:this.lines.length*0.7 });
           this.lines.push({ pts: smoothPts(streamline(p=>this.field(p), this.skimSeed(0.0, false, skim), 4, nSkim), 3), k:this.lines.length*0.7 });
+        }
+      },
+      // 剥離時の「死水域」に うねる後流（毎フレーム引き直して アニメ）。カルマン渦列風
+      retraceWake() {
+        this.wakeLines = [];
+        const deg=Math.abs(this.alpha*180/Math.PI); const amt=clamp((deg-11)/10,0,1);
+        if (amt<=0.2) return;
+        const up=this.sucUp(), sepFrac=clamp(0.72-0.40*amt, 0.30, 0.9);
+        for (const sk of [5, 13, 22, 33]){
+          const pts=smoothPts(streamline(p=>this.field(p), this.skimSeed(sepFrac+0.06, up, sk), 5, Math.ceil(W/5)), 1);
+          this.wakeLines.push({ pts, k:this.wakeLines.length*0.7 });
         }
       },
       seedP(start) {
@@ -611,18 +632,21 @@
           if (pt.x>W+4||pt.y<-30||pt.y>H+30||pt.life>500) this.parts[i]=this.seedP(false);
         }
       },
-      // 上面うしろの「剥離域」だけ 0..1
+      // 剥離域 0..1。迎え角が大きいほど 分離点が前縁へ前進（前半から剥がれる）
       sepFactor(pt) {
         const deg=Math.abs(this.alpha*180/Math.PI);
-        const base=clamp((deg-11)/15,0,1); if (base<=0) return 0;
+        const amt=clamp((deg-11)/10, 0, 1); if (amt<=0) return 0;   // 11°→21° で 0→1
         const dx=pt.x-this.center.x, dy=pt.y-this.center.y;
         const ca=Math.cos(this.alpha), sa=Math.sin(this.alpha);
         const wx = dx*ca + dy*sa, wy = -dx*sa + dy*ca;    // wy<0 上面
         const depth=this.sucUp()? -wy : wy;               // 吸い込み面の深さ
         if (depth < 0.02*this.R) return 0;
-        const xi = (wx + 0.1*this.R)/(2.6*this.R); if (xi<0 || xi>1) return 0;
-        const yf = clamp(1-depth/(1.3*this.R),0,1);
-        return base * clamp(xi*1.5,0,1) * yf;
+        const ch=this.chord();
+        const sepFrac = clamp(0.72 - 0.40*amt, 0.30, 0.9); // 分離点：後縁寄り→翼頂(前半)へ前進
+        const xsep = (sepFrac - 0.5)*ch;
+        const s = clamp((wx - xsep)/(0.18*ch), 0, 1);     // 分離点より後ろで 1
+        const yf = clamp(1 - depth/(1.7*this.R), 0, 1);
+        return amt * s * yf;
       },
       draw() {
         const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,"#0c1426"); g.addColorStop(1,"#0f1a30");
@@ -639,6 +663,10 @@
             } else {
               drawSpeedPolyline(i=>pts[i], pts.length, smax, 1.9);
             }
+          }
+          if (this.wakeLines) for (const line of this.wakeLines){   // 死水域の うねる後流
+            const pts=line.pts; if (pts.length<2) continue;
+            drawSpeedPolyline(i=>pts[i], pts.length, smax, 1.9);
           }
         } else {
           drawTrails(this.parts, smax);
@@ -704,7 +732,7 @@
         if (flowStyle==="stream") sc.retrace(); else sc.stepParts();
       } else {
         sc.update();
-        if (flowStyle==="dots") sc.stepParts();
+        if (flowStyle==="dots") sc.stepParts(); else sc.retraceWake();
       }
       sc.draw();
       drawLegend();
