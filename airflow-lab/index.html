@@ -395,6 +395,9 @@
       buildPoly() {
         const c=this.center, ch=this.chord(), ca=Math.cos(this.alpha), sa=Math.sin(this.alpha);
         this.poly = AIRFOIL.map(q=>{ const X=q.x*ch, Y=-q.y*ch; return { x:c.x + X*ca - Y*sa, y:c.y + X*sa + Y*ca }; });
+        // 各エッジを上面／下面にタグづけ（中点のchordYで判定）→ 近くを見るとき同じ側だけ見る
+        this.edgeUp = []; const P=this.poly, n=P.length;
+        for (let i=0;i<n;i++){ const a=P[i], b=P[(i+1)%n]; this.edgeUp.push(this.chordY({x:(a.x+b.x)/2,y:(a.y+b.y)/2})<0); }
       },
       chordY(pt){ const dx=pt.x-this.center.x, dy=pt.y-this.center.y; return -dx*Math.sin(this.alpha)+dy*Math.cos(this.alpha); }, // <0 上面側
       pointInPoly(p){
@@ -405,9 +408,11 @@
         }
         return inside;
       },
-      nearest(p){   // 翼輪郭への最近点・外向き法線・距離・内外
-        const poly=this.poly; let best=1e18, qx=0, qy=0;
+      nearest(p, side){   // 翼輪郭への最近点・外向き法線・距離・内外。side='up'/'lo'で その面だけ見る
+        const poly=this.poly, eu=this.edgeUp; let best=1e18, qx=0, qy=0;
         for (let i=0;i<poly.length;i++){
+          if (side==="up" && !eu[i]) continue;
+          if (side==="lo" && eu[i]) continue;
           const a=poly[i], b=poly[(i+1)%poly.length];
           const abx=b.x-a.x, aby=b.y-a.y; const d2=abx*abx+aby*aby||1;
           let t=((p.x-a.x)*abx+(p.y-a.y)*aby)/d2; t=t<0?0:t>1?1:t;
@@ -418,9 +423,23 @@
         const inside=this.pointInPoly(p); if (inside){ nx=-nx; ny=-ny; }
         return { dist, nx, ny, inside };
       },
+      // ダウンウォッシュ：翼の前で空気が少し上がり（アップウォッシュ）、後ろで下へ押される（＝揚力の反作用）
+      downwash(pt) {
+        const U=this.UINF, ch=this.chord();
+        const g=Math.sin(this.alpha)+this.CAMBER;             // 循環（揚力）の目安
+        const dx=pt.x-this.center.x, dy=pt.y-this.center.y;
+        const ca=Math.cos(this.alpha), sa=Math.sin(this.alpha);
+        const wx=dx*ca+dy*sa, wy=-dx*sa+dy*ca;                 // 翼座標（wx:下流, wy<0:上面側）
+        const L=0.7*ch, reach=this.R*1.7;
+        const s=(wx/L)*Math.exp(-0.5*(wx/L)*(wx/L));           // 前(<0)=上向き / 後(>0)=下向き
+        const yf=Math.exp(-(wy*wy)/(reach*reach));
+        return g*U*1.6*s*yf;                                   // 画面+y=下向き
+      },
       field(pt) {
-        const U=this.UINF; const na=this.nearest(pt);
-        if (na.inside) return { x:U*0.4 + na.nx*U*0.6, y:na.ny*U*0.6 };  // 中なら外へ
+        const U=this.UINF; const naF=this.nearest(pt);
+        if (naF.inside) return { x:U*0.4 + naF.nx*U*0.6, y:naF.ny*U*0.6 };  // 中なら外へ
+        const upper = this.chordY(pt) < 0;
+        const na = this.nearest(pt, upper?"up":"lo");   // 上の点は上面だけ・下の点は下面だけを見る（前縁で上下に分かれる）
         let vx=U, vy=0;
         const band=this.R*0.95;
         if (na.dist<band){
@@ -432,10 +451,15 @@
           // 方向を 一様(1,0)→接線 へ ブレンド（＝表面に沿う）
           let dx=(1-follow)+follow*tx, dy=follow*ty; const dl=Math.hypot(dx,dy)||1; dx/=dl; dy/=dl;
           // 速さ：上面は加速（＝色が赤くなる・循環のかわり）、下面は少し減速
-          const upper = this.chordY(pt) < 0;
           const spd = upper ? U*(1 + (Math.sin(this.alpha)+this.CAMBER+0.20)*1.9*follow)
                             : U*(1 - 0.12*follow);
           vx=dx*spd; vy=dy*spd;
+        }
+        vy += this.downwash(pt);   // 前で上がり・後ろで下へ（翼が空気を下へ押す）
+        // 翼面にめり込ませない：内向き成分を消して表面をなめる
+        if (naF.dist < this.R*0.5){
+          const vn = vx*naF.nx + vy*naF.ny;
+          if (vn < 0){ vx -= naF.nx*vn; vy -= naF.ny*vn; }
         }
         return { x:vx, y:vy };
       },
