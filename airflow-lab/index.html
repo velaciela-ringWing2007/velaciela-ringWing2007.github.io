@@ -58,6 +58,7 @@
   </div>
 
   <div class="toolbar">
+    <button class="btn" id="flowBtn">つぶつぶ</button>
     <button class="btn" id="pressureBtn">あつりょくを みる</button>
     <button class="btn" id="forceBtn">ちからを みる</button>
     <button class="btn" id="resetBtn">さいしょから</button>
@@ -74,11 +75,13 @@
     const tipEl = document.getElementById("tip");
     const forceBtn = document.getElementById("forceBtn");
     const pressureBtn = document.getElementById("pressureBtn");
+    const flowBtn = document.getElementById("flowBtn");
 
     let W = 0, H = 0, DPR = 1;
     let currentMode = "blower";
     let showForces = false;
     let showPressure = false;
+    let flowStyle = "stream";   // "stream"=ながれせん / "dots"=つぶつぶ
     let TIME = 0;
 
     // ---- ベクトル ----
@@ -102,6 +105,24 @@
         vx += -dy*f; vy += dx*f;
       }
       return { x:vx, y:vy };
+    }
+
+    // つぶつぶ（流れる粒）の軌跡を描く
+    function drawTrails(parts, colorMax) {
+      if (!parts) return;
+      ctx.lineCap="round";
+      for (const p of parts){
+        if (p.trail.length<2) continue;
+        ctx.strokeStyle = speedColor(p.sp||colorMax*0.35, colorMax);
+        ctx.globalAlpha = 0.85; ctx.lineWidth = 2.3;
+        ctx.beginPath(); ctx.moveTo(p.trail[0].x, p.trail[0].y);
+        for (let i=1;i<p.trail.length;i++) ctx.lineTo(p.trail[i].x, p.trail[i].y);
+        ctx.stroke();
+        const h=p.trail[p.trail.length-1];
+        ctx.globalAlpha=0.95; ctx.fillStyle="#eaf4ff";
+        ctx.beginPath(); ctx.arc(h.x,h.y,2,0,Math.PI*2); ctx.fill();
+      }
+      ctx.globalAlpha=1;
     }
 
     // 流線（ストリームライン）を1本トレース。各点に局所速度 sp を持たせる
@@ -140,13 +161,14 @@
       // --- 物理定数（Nodeで調整済み）---
       U0: 11, W0: 48, SPREAD: 0.13, CD: 0.0034, CC: 0.0075,
       G: 0.10, M: 1, DAMP: 0.95, BALLR: 34, SUB: 3,
-      fan: null, jetAng: 0, ball: null, vel: {x:0,y:0}, floorY: 0, lines: [], vortices: [],
+      fan: null, jetAng: 0, ball: null, vel: {x:0,y:0}, floorY: 0, lines: [], vortices: [], parts: [],
       make() {
         this.fan = { x: 0.5*W, y: 0.92*H };
         this.floorY = 0.955*H;
         this.jetAng = 0;
         this.ball = { x: 0.5*W, y: 0.42*H };
         this.vel = { x:0, y:0 };
+        this.parts = [];
         this.retrace();
       },
       jvec() { return { x: Math.sin(this.jetAng), y: -Math.cos(this.jetAng) }; },
@@ -162,7 +184,7 @@
         const s = dot(rel, J), a = dot(rel, K);
         const sp = this.speedAt(s, a);
         const hw = this.W0 + this.SPREAD*s;
-        const outward = (hw>0 ? a/hw : 0) * 0.3;
+        const outward = (hw>0 ? a/hw : 0) * 0.12;   // 広がりを抑えて 物の まわりに 流れを 集める
         const dir = norm(add(J, mul(K, outward)));
         return { x: dir.x*sp, y: dir.y*sp, speed: sp };
       },
@@ -193,13 +215,34 @@
       retrace() {   // 止まった流線を引き直す（物を動かすと形が変わる）
         this.updateVortices();
         this.lines = [];
-        const J = this.jvec(), K = perp(J), n = 19;
+        const J = this.jvec(), K = perp(J), n = 24;
         for (let i=0;i<n;i++){
-          const a = (i/(n-1)*2-1) * this.W0 * 1.05;
+          const u = (i/(n-1)*2-1);
+          const a = Math.sign(u)*Math.pow(Math.abs(u),1.3) * this.W0 * 1.1;   // 中心ほど 密に
           const seed = add(this.fan, mul(K, a));
           const pts = streamline(p=>this.visFlow(p), seed, 7, 130);
           let avg=0; for (const q of pts) avg+=q.sp; avg/=(pts.length||1);
           this.lines.push({ pts, avg });
+        }
+      },
+      // つぶつぶ（流れる粒）
+      seedP() {
+        const J=this.jvec(), K=perp(J);
+        const u=Math.random()*2-1; const a=Math.sign(u)*Math.pow(Math.abs(u),1.6)*this.W0*1.1;
+        const p=add(this.fan, mul(K, a));
+        return { x:p.x, y:p.y, trail:[], life:Math.random()*40, sp:0 };
+      },
+      stepParts() {
+        this.updateVortices();
+        if (!this.parts || this.parts.length===0){ this.parts=[]; for(let i=0;i<240;i++) this.parts.push(this.seedP()); }
+        for (let i=0;i<this.parts.length;i++){
+          const pt=this.parts[i];
+          const v=this.visFlow(pt); const sp=len(v); pt.sp=sp;
+          const d=sub(pt,this.ball), dist=len(d);
+          if (dist<this.BALLR*1.02 && dist>0.1){ const n=mul(d,1/dist); pt.x=this.ball.x+n.x*this.BALLR*1.02; pt.y=this.ball.y+n.y*this.BALLR*1.02; }
+          pt.x+=v.x*0.8; pt.y+=v.y*0.8; pt.life++;
+          pt.trail.push({x:pt.x,y:pt.y}); if(pt.trail.length>6) pt.trail.shift();
+          if (pt.y<-6||pt.x<-6||pt.x>W+6||pt.life>170||(sp<0.05&&pt.life>20)) this.parts[i]=this.seedP();
         }
       },
       forces(pos, vel) {
@@ -232,17 +275,21 @@
         const g = ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,"#0d1324"); g.addColorStop(1,"#141b2e");
         ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
         ctx.fillStyle="#232b40"; ctx.fillRect(0,this.floorY,W,H-this.floorY);
-        // 止まった流線
-        ctx.lineCap="round"; ctx.lineJoin="round";
-        for (const line of this.lines){
-          if (line.pts.length<2) continue;
-          ctx.strokeStyle = speedColor(line.avg, this.U0*1.1);
-          ctx.globalAlpha = 0.85; ctx.lineWidth = 2;
-          ctx.beginPath(); ctx.moveTo(line.pts[0].x, line.pts[0].y);
-          for (let i=1;i<line.pts.length;i++) ctx.lineTo(line.pts[i].x, line.pts[i].y);
-          ctx.stroke();
+        // 空気の流れ（ながれせん or つぶつぶ）
+        if (flowStyle==="stream"){
+          ctx.lineCap="round"; ctx.lineJoin="round";
+          for (const line of this.lines){
+            if (line.pts.length<2) continue;
+            ctx.strokeStyle = speedColor(line.avg, this.U0*1.1);
+            ctx.globalAlpha = 0.85; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(line.pts[0].x, line.pts[0].y);
+            for (let i=1;i<line.pts.length;i++) ctx.lineTo(line.pts[i].x, line.pts[i].y);
+            ctx.stroke();
+          }
+          ctx.globalAlpha=1;
+        } else {
+          drawTrails(this.parts, this.U0*1.1);
         }
-        ctx.globalAlpha=1;
         this.drawFan();
         if (showPressure) this.drawPressure();   // 全方位の 正圧(+)／負圧(−)
         // 物体
@@ -307,10 +354,11 @@
     // ✈️ 翼の揚力（円柱＋循環のポテンシャル流で流線）
     // =====================================================================
     const WG = {
-      UINF: 2.4, R: 62, GFAC: 2.2, CAMBER: 0.10, alpha: 0.18, center: null, lines: [],
+      UINF: 2.4, R: 62, GFAC: 2.2, CAMBER: 0.10, alpha: 0.18, center: null, lines: [], parts: [],
       make() {
         this.center = { x: 0.44*W, y: 0.5*H };
         this.alpha = 0.18;
+        this.parts = [];
         this.retrace();
       },
       chord(){ return this.R*1.9; },
@@ -326,12 +374,39 @@
       },
       retrace() {   // 止まった流線を引き直す（迎え角を変えると形が変わる）
         this.lines = [];
-        const n = 21;
-        for (let i=0;i<n;i++){
-          const y = H*(0.06 + 0.88*i/(n-1));
+        const ys = [];
+        for (let i=0;i<10;i++) ys.push(H*(0.05 + 0.9*i/9));                 // 全体に うっすら
+        const band = 2.5*this.R;
+        for (let i=0;i<20;i++) ys.push(clamp(this.center.y - band + 2*band*i/19, 4, H-4)); // 翼の近くは 密に
+        for (const y of ys){
           const pts = streamline(p=>this.field(p), {x:2, y}, 6, 200);
           let avg=0; for (const q of pts) avg+=q.sp; avg/=(pts.length||1);
-          this.lines.push({ pts, avg, k:i*0.7 });
+          this.lines.push({ pts, avg, k:this.lines.length*0.7 });
+        }
+      },
+      // つぶつぶ（流れる粒）。剥離域では時間で揺れる
+      flowVel(pt) {
+        const v=this.field(pt); const s=this.sepFactor(pt);
+        if (s>0){ const u=norm(v), nrm=perp(u); const w=Math.sin(TIME*9 + pt.x*0.06 + pt.y*0.05)*this.UINF*1.0*s; return { x:v.x+nrm.x*w, y:v.y+nrm.y*w }; }
+        return v;
+      },
+      seedP(start) {
+        let y;
+        if (Math.random()<0.6) y=this.center.y + (Math.random()*2-1)*2.5*this.R;  // 翼の近くに 多め
+        else y=Math.random()*H;
+        y=clamp(y,2,H-2);
+        return { x: start? Math.random()*W : -4, y, trail:[], life:Math.random()*120, sp:0 };
+      },
+      stepParts() {
+        if (!this.parts || this.parts.length===0){ this.parts=[]; for(let i=0;i<240;i++) this.parts.push(this.seedP(true)); }
+        for (let i=0;i<this.parts.length;i++){
+          const pt=this.parts[i];
+          for (let k=0;k<2;k++){ const v=this.flowVel(pt); pt.x+=v.x*1.1; pt.y+=v.y*1.1; pt.sp=len(v); }
+          const d=sub(pt,this.center), r=Math.hypot(d.x,d.y);
+          if (r<this.R){ const n=mul(d,1/(r||1)); pt.x=this.center.x+n.x*this.R; pt.y=this.center.y+n.y*this.R; }
+          pt.life++;
+          pt.trail.push({x:pt.x,y:pt.y}); if(pt.trail.length>6) pt.trail.shift();
+          if (pt.x>W+4||pt.y<-30||pt.y>H+30||pt.life>500) this.parts[i]=this.seedP(false);
         }
       },
       // 上面うしろの「剥離域」だけ 0..1。ここだけ ぷるぷる させる
@@ -353,26 +428,30 @@
       draw() {
         const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,"#0c1426"); g.addColorStop(1,"#0f1a30");
         ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
-        ctx.lineCap="round"; ctx.lineJoin="round";
         const smax=this.UINF*2.4;
-        for (const line of this.lines){
-          const pts=line.pts; if (pts.length<2) continue;
-          ctx.strokeStyle=speedColor(line.avg, smax); ctx.globalAlpha=0.85; ctx.lineWidth=1.8;
-          ctx.beginPath();
-          for (let i=0;i<pts.length;i++){
-            let X=pts[i].x, Y=pts[i].y;
-            const s=this.sepFactor(pts[i]);
-            if (s>0){   // 剥離域だけ 波打たせる
-              const a=pts[Math.min(i+1,pts.length-1)], b=pts[Math.max(i-1,0)];
-              let dx=a.x-b.x, dy=a.y-b.y; const l=Math.hypot(dx,dy)||1; dx/=l; dy/=l;
-              const w = Math.sin(TIME*9 + i*0.5 + line.k) * 11 * s;
-              X += -dy*w; Y += dx*w;
+        if (flowStyle==="stream"){
+          ctx.lineCap="round"; ctx.lineJoin="round";
+          for (const line of this.lines){
+            const pts=line.pts; if (pts.length<2) continue;
+            ctx.strokeStyle=speedColor(line.avg, smax); ctx.globalAlpha=0.85; ctx.lineWidth=1.8;
+            ctx.beginPath();
+            for (let i=0;i<pts.length;i++){
+              let X=pts[i].x, Y=pts[i].y;
+              const s=this.sepFactor(pts[i]);
+              if (s>0){   // 剥離域だけ 波打たせる
+                const a=pts[Math.min(i+1,pts.length-1)], b=pts[Math.max(i-1,0)];
+                let dx=a.x-b.x, dy=a.y-b.y; const l=Math.hypot(dx,dy)||1; dx/=l; dy/=l;
+                const w = Math.sin(TIME*9 + i*0.5 + line.k) * 11 * s;
+                X += -dy*w; Y += dx*w;
+              }
+              i?ctx.lineTo(X,Y):ctx.moveTo(X,Y);
             }
-            i?ctx.lineTo(X,Y):ctx.moveTo(X,Y);
+            ctx.stroke();
           }
-          ctx.stroke();
+          ctx.globalAlpha=1;
+        } else {
+          drawTrails(this.parts, smax);
         }
-        ctx.globalAlpha=1;
         // 翼型（キャンバー付き・迎え角ぶん回転）
         const c=this.center, ch=this.chord();
         ctx.save(); ctx.translate(c.x,c.y); ctx.rotate(this.alpha);
@@ -416,9 +495,9 @@
 
     const MODES = {
       blower: { ref: BL, hint:"🎈 まわりの かぜが 物の 上で うずを まき、全方位の 圧力（赤=おす／青=すう）で 位置が きまる",
-        tip:"物を ドラッグ。白い◯で ジェットの むきを かえられる。赤=正圧（おす）・青=負圧（すう）。「ちからを みる」で 合計の力。" },
-      wing:   { ref: WG, hint:"✈️ かぜは 水平に ながれる。つばさの 上は はやく、うしろには うずが できる",
-        tip:"黄色い◯を 上下に ドラッグ して つばさの むきを かえよう。角度を あげると うしろの うずが 大きくなる。" }
+        tip:"物を ドラッグ。白い◯で むきを かえられる。「つぶつぶ」で 流れる粒／線 を きりかえ。「あつりょく」で 赤=おす・青=すう。" },
+      wing:   { ref: WG, hint:"✈️ かぜは 水平に ながれる。つばさの 上は はやく、はがれないと きれいに ながれる",
+        tip:"黄色い◯を 上下に ドラッグ。「つぶつぶ」で 流れる粒／線 を きりかえ。角度を あげすぎると うしろが はがれて 波打つ。" }
     };
 
     // ---- 描画ループ ----
@@ -428,7 +507,12 @@
       TIME = performance.now()/1000;
       if (dragTarget) applyDrag();
       const sc = MODES[currentMode].ref;
-      if (currentMode==="blower") { sc.update(dragTarget==="ball"); sc.retrace(); }
+      if (currentMode==="blower") {
+        sc.update(dragTarget==="ball");
+        if (flowStyle==="stream") sc.retrace(); else sc.stepParts();
+      } else {
+        if (flowStyle==="dots") sc.stepParts();
+      }
       sc.draw();
       requestAnimationFrame(frame);
     }
@@ -479,6 +563,7 @@
     });
     forceBtn.addEventListener("click",()=>{ showForces=!showForces; forceBtn.classList.toggle("on",showForces); });
     pressureBtn.addEventListener("click",()=>{ showPressure=!showPressure; pressureBtn.classList.toggle("on",showPressure); });
+    flowBtn.addEventListener("click",()=>{ flowStyle = flowStyle==="stream" ? "dots" : "stream"; flowBtn.classList.toggle("on", flowStyle==="dots"); });
     document.getElementById("resetBtn").addEventListener("click",()=>{ MODES[currentMode].ref.make(); });
 
     document.addEventListener("visibilitychange",()=>{ running=!document.hidden; if(running) frame(); });
