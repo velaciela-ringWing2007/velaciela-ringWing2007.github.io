@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0b0e14">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>ころころ ジェットコースター</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="../icons/icon.svg">
+  <style>
+    :root { --ui-bg:#101521; --ui-panel:#1d2436; --ui-text:#eef2fa; --ui-sub:#9fa9c0; --accent:#ffd43b; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin:0; padding:0; height:100%;
+      font-family:"Hiragino Maru Gothic ProN","Yu Gothic UI","Segoe UI",system-ui,sans-serif;
+      background:var(--ui-bg); color:var(--ui-text); overscroll-behavior:none;
+      -webkit-user-select:none; user-select:none; }
+    body { display:flex; flex-direction:column; }
+    header { padding:10px 12px 4px; text-align:center; }
+    h1 { margin:0 0 8px; font-size:1.18rem; letter-spacing:.03em; }
+    .mode-tabs { display:flex; gap:8px; justify-content:center; max-width:620px; margin:0 auto; }
+    .mode-tab { flex:1; padding:9px 6px; border:2px solid transparent; border-radius:16px;
+      background:var(--ui-panel); color:var(--ui-sub); font-size:.98rem; font-weight:700; cursor:pointer; line-height:1.3;
+      transition:transform .08s ease, border-color .15s ease, color .15s ease; }
+    .mode-tab .emoji { font-size:1.3rem; display:block; }
+    .mode-tab:active { transform:scale(.96); }
+    .mode-tab.active { color:var(--ui-text); border-color:var(--accent); background:#273049; }
+    .stage-wrap { flex:1; position:relative; margin:8px 10px; border-radius:18px; overflow:hidden;
+      box-shadow:0 0 0 2px rgba(255,255,255,.06); touch-action:none; }
+    #stage { position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+    .ctl-wrap { padding-bottom:calc(2px + env(safe-area-inset-bottom)); }
+    .toolbar { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; padding:6px 10px 0; }
+    .seg-label { color:var(--ui-sub); font-size:.78rem; font-weight:700; align-self:center; margin-right:2px; }
+    .btn { border:none; border-radius:12px; padding:8px 13px; font-size:.86rem; font-weight:700;
+      background:var(--ui-panel); color:var(--ui-text); cursor:pointer; }
+    .btn:active { transform:scale(.96); }
+    .btn.on { background:var(--accent); color:#332a00; }
+    .tip { text-align:center; color:var(--ui-sub); font-size:.74rem; padding:4px 12px 2px; line-height:1.5; }
+    a.home { color:var(--ui-sub); font-size:.78rem; text-decoration:none; }
+    a.home:active { color:var(--accent); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🎢 ころころ ジェットコースター</h1>
+    <div class="mode-tabs">
+      <button class="mode-tab active" data-grav="earth"><span class="emoji">🌍</span>ちきゅう</button>
+      <button class="mode-tab" data-grav="moon"><span class="emoji">🌙</span>おつきさま</button>
+      <button class="mode-tab" data-grav="space"><span class="emoji">🚀</span>うちゅう</button>
+    </div>
+  </header>
+
+  <div class="stage-wrap">
+    <canvas id="stage"></canvas>
+  </div>
+
+  <div class="ctl-wrap">
+    <div class="toolbar">
+      <span class="seg-label">レール</span>
+      <button class="btn on" id="pLoop" data-preset="loop">〰️ おおきなループ</button>
+      <button class="btn" id="pJump" data-preset="jump">⛰️ ジャンプだい</button>
+      <button class="btn" id="pCoaster" data-preset="coaster">🎢 コースター</button>
+      <button class="btn" id="pDraw" data-preset="draw">✏️ おえかき</button>
+    </div>
+    <div class="toolbar">
+      <span class="seg-label">ゆか</span>
+      <button class="btn" id="fIce" data-fric="ice">❄️ こおり</button>
+      <button class="btn on" id="fNormal" data-fric="normal">🛣️ ふつう</button>
+      <button class="btn" id="fSand" data-fric="sand">🏖️ すなば</button>
+      <button class="btn" id="forceBtn">➡️ ちからを みる</button>
+      <button class="btn" id="againBtn">🔁 もういちど</button>
+    </div>
+    <p class="tip" id="tip"></p>
+    <p class="tip"><a class="home" href="../index.html">← ツール いちらんへ</a></p>
+  </div>
+
+  <script>
+  (function () {
+    "use strict";
+    const canvas = document.getElementById("stage");
+    const ctx = canvas.getContext("2d", { alpha:false });
+    const tipEl = document.getElementById("tip");
+
+    let W=0, H=0, DPR=1;
+    const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+    const lerp=(a,b,t)=>a+(b-a)*t;
+
+    // 設定
+    const GRAV = { earth:650, moon:104, space:0 };
+    const FRIC = { ice:0.002, normal:0.022, sand:0.10 };
+    let gravKey="earth", fricKey="normal";
+    let showForces=false;
+    let G=GRAV.earth, MU=FRIC.normal;
+
+    // =============== レール（スプライン補間＋弧長で等間隔サンプル）===============
+    // セントリペタル Catmull-Rom（点の間隔が ばらついても オーバーシュートしない＝曲率が暴れない）
+    function catmullRom(cp, perSeg){
+      const n=cp.length; if (n<2) return cp.slice();
+      const pts=[]; const P=(i)=>cp[clamp(i,0,n-1)];
+      const dt=(a,b)=>Math.max(1e-4, Math.pow(Math.hypot(b.x-a.x,b.y-a.y),0.5));
+      for (let i=0;i<n-1;i++){
+        const p0=P(i-1), p1=P(i), p2=P(i+1), p3=P(i+2);
+        const t0=0, t1=t0+dt(p0,p1), t2=t1+dt(p1,p2), t3=t2+dt(p2,p3);
+        for (let j=0;j<perSeg;j++){
+          const t=t1+(t2-t1)*(j/perSeg);
+          const a1x=(t1-t)/(t1-t0)*p0.x+(t-t0)/(t1-t0)*p1.x, a1y=(t1-t)/(t1-t0)*p0.y+(t-t0)/(t1-t0)*p1.y;
+          const a2x=(t2-t)/(t2-t1)*p1.x+(t-t1)/(t2-t1)*p2.x, a2y=(t2-t)/(t2-t1)*p1.y+(t-t1)/(t2-t1)*p2.y;
+          const a3x=(t3-t)/(t3-t2)*p2.x+(t-t2)/(t3-t2)*p3.x, a3y=(t3-t)/(t3-t2)*p2.y+(t-t2)/(t3-t2)*p3.y;
+          const b1x=(t2-t)/(t2-t0)*a1x+(t-t0)/(t2-t0)*a2x, b1y=(t2-t)/(t2-t0)*a1y+(t-t0)/(t2-t0)*a2y;
+          const b2x=(t3-t)/(t3-t1)*a2x+(t-t1)/(t3-t1)*a3x, b2y=(t3-t)/(t3-t1)*a2y+(t-t1)/(t3-t1)*a3y;
+          const x=(t2-t)/(t2-t1)*b1x+(t-t1)/(t2-t1)*b2x, y=(t2-t)/(t2-t1)*b1y+(t-t1)/(t2-t1)*b2y;
+          pts.push({x,y});
+        }
+      }
+      pts.push({x:cp[n-1].x,y:cp[n-1].y});
+      return pts;
+    }
+    function resampleUniform(pts, ds){
+      if (pts.length<2) return pts.slice();
+      const out=[pts[0]]; let acc=0, prev=pts[0];
+      for (let i=1;i<pts.length;i++){
+        let a=prev, b=pts[i]; let seg=Math.hypot(b.x-a.x,b.y-a.y);
+        while (acc+seg>=ds){
+          const t=(ds-acc)/seg; const nx=lerp(a.x,b.x,t), ny=lerp(a.y,b.y,t);
+          out.push({x:nx,y:ny}); a={x:nx,y:ny}; seg=Math.hypot(b.x-a.x,b.y-a.y); acc=0; prev=a;
+        }
+        acc+=seg; prev=b;
+      }
+      out.push(pts[pts.length-1]);
+      return out;
+    }
+    const TRACK = {
+      X:null, Y:null, TX:null, TY:null, KS:null, N:0, ds:5, L:0, minY:0, maxY:0,
+      buildFromNorm(cps){   // cps: 0..1 正規化 制御点
+        const px=cps.map(p=>({x:p.x*W, y:p.y*H}));
+        this.buildFromPx(px);
+      },
+      buildFromPx(px){
+        if (px.length<2){ this.N=0; return; }
+        const dense=catmullRom(px, 20);
+        // なめらか化（オーバーシュートを抑える）
+        for (let s=0;s<4;s++){ for (let i=1;i<dense.length-1;i++){
+          dense[i].x=(dense[i-1].x+2*dense[i].x+dense[i+1].x)/4;
+          dense[i].y=(dense[i-1].y+2*dense[i].y+dense[i+1].y)/4; } }
+        const uni=resampleUniform(dense, this.ds);
+        const n=uni.length; if (n<3){ this.N=0; return; }
+        this.N=n; this.L=(n-1)*this.ds;
+        this.X=new Float32Array(n); this.Y=new Float32Array(n);
+        this.TX=new Float32Array(n); this.TY=new Float32Array(n); this.KS=new Float32Array(n);
+        for (let i=0;i<n;i++){ this.X[i]=uni[i].x; this.Y[i]=uni[i].y; }
+        this.minY=Infinity; this.maxY=-Infinity;
+        for (let i=0;i<n;i++){ if (this.Y[i]<this.minY)this.minY=this.Y[i]; if (this.Y[i]>this.maxY)this.maxY=this.Y[i]; }
+        // 接線（広めのステンシルで なめらかに）
+        const WID=3;
+        for (let i=0;i<n;i++){ const a=Math.max(0,i-WID), b=Math.min(n-1,i+WID);
+          let tx=this.X[b]-this.X[a], ty=this.Y[b]-this.Y[a]; const l=Math.hypot(tx,ty)||1; this.TX[i]=tx/l; this.TY[i]=ty/l; }
+        // 曲率（符号つき）KS = (dT/ds)·n̂, n̂=(TY,-TX)
+        for (let i=0;i<n;i++){ const a=Math.max(0,i-WID), b=Math.min(n-1,i+WID); const span=(b-a)*this.ds||this.ds;
+          const dtx=(this.TX[b]-this.TX[a])/span, dty=(this.TY[b]-this.TY[a])/span;
+          this.KS[i]=dtx*this.TY[i] + dty*(-this.TX[i]); }
+        // 曲率の ノイズ/リップルを ならす（高速時の 誤離脱を防ぐ）＋暴れ止めクランプ
+        for (let s=0;s<2;s++){ const tmp=this.KS.slice(); for (let i=1;i<n-1;i++) this.KS[i]=(tmp[i-1]+2*tmp[i]+tmp[i+1])/4; }
+        for (let i=0;i<n;i++) this.KS[i]=clamp(this.KS[i], -0.045, 0.045);
+      },
+      sample(s){
+        const N=this.N; if (N<2) return null;
+        const fi=clamp(s/this.ds, 0, N-1.0001); const i=Math.floor(fi), f=fi-i;
+        const x=lerp(this.X[i],this.X[i+1],f), y=lerp(this.Y[i],this.Y[i+1],f);
+        let tx=lerp(this.TX[i],this.TX[i+1],f), ty=lerp(this.TY[i],this.TY[i+1],f);
+        const l=Math.hypot(tx,ty)||1; tx/=l; ty/=l;
+        const ks=lerp(this.KS[i],this.KS[i+1],f);
+        return { x,y,tx,ty,ks };
+      }
+    };
+
+    // =============== 玉（レール拘束／コースアウト後は放物運動）===============
+    const BALL = {
+      s:0, v:0, detached:false, px:0, py:0, vx:0, vy:0, E0:0, outT:0, lost:false, finished:false,
+      reset(){
+        this.detached=false; this.lost=false; this.finished=false; this.outT=0;
+        this.s=2; this.v=0;
+        const sm=TRACK.sample(this.s);
+        // 初期の位置エネルギー基準（最下点 maxY）で E0
+        if (sm){ this.E0 = (G>0 ? G*(TRACK.maxY - sm.y) : 0); }
+      },
+      step(dt){
+        if (TRACK.N<2) return;
+        if (this.detached){ this.stepFree(dt); return; }
+        const SUB=10, h=dt/SUB;
+        for (let k=0;k<SUB;k++){
+          const sm=TRACK.sample(this.s); if (!sm) break;
+          const gT = G*sm.ty;                 // 重力の接線成分（gは(0,G)下向き）
+          const gN = G*(-sm.tx);              // 重力の法線成分（n̂=(ty,-tx) 方向）
+          const Npm = this.v*this.v*sm.ks - gN;   // 法線力/質量（+n̂向き）。レールは+n̂からしか押せない
+          if (G>0 && Npm < -0.12*G){           // 支えきれない→コースアウト（Gに対して明確に負のときだけ）
+            this.detached=true; this.lost=true; this.px=sm.x; this.py=sm.y;
+            this.vx=this.v*sm.tx; this.vy=this.v*sm.ty; return;
+          }
+          const fric = MU * Math.abs(Npm);     // 動摩擦 = μ|N|
+          let aT = gT;
+          if (Math.abs(this.v) > 1e-3) aT -= Math.sign(this.v)*fric;
+          else if (Math.abs(gT) <= fric) aT = 0;   // 静止摩擦で止まったまま
+          this.v += aT*h;
+          this.s += this.v*h;
+          if (this.s < 0){ this.s=0; if (this.v<0) this.v=0; }
+          if (this.s > TRACK.L){                // 端から飛び出す→放物運動
+            const em=TRACK.sample(TRACK.L); this.detached=true; this.finished=true;
+            this.px=em.x; this.py=em.y; this.vx=this.v*em.tx; this.vy=this.v*em.ty; return;
+          }
+        }
+      },
+      stepFree(dt){
+        this.vy += G*dt; this.px += this.vx*dt; this.py += this.vy*dt;
+        if (this.px<-40||this.px>W+40||this.py>H+40){ this.outT+=dt; if (this.outT>0.3) this.reset(); }
+      },
+      cur(){ // 現在の位置・速度ベクトル
+        if (this.detached) return { x:this.px, y:this.py, vx:this.vx, vy:this.vy, speed:Math.hypot(this.vx,this.vy) };
+        const sm=TRACK.sample(this.s); if (!sm) return null;
+        return { x:sm.x, y:sm.y, vx:this.v*sm.tx, vy:this.v*sm.ty, speed:Math.abs(this.v), sm };
+      }
+    };
+
+    // =============== プリセット（正規化 制御点）===============
+    function presetLoop(){
+      const cp=[{x:0.05,y:0.08},{x:0.15,y:0.24},{x:0.26,y:0.44},{x:0.35,y:0.58}];
+      const cx=0.47, cy=0.52, Rpx=0.16*Math.min(W,H), rx=Rpx/W, ry=Rpx/H;   // px で真円にする（W≠Hでも楕円化しない）
+      // 入口θ=255・出口θ=625 と ずらして「同じ座標の制御点」を作らない＋出口は ほぼ水平（クレスト禁止）
+      for (let d=255; d<=625; d+=10){ const a=d*Math.PI/180; cp.push({x:cx+rx*Math.cos(a), y:cy - ry*Math.sin(a)}); }
+      cp.push({x:0.60,y:0.71},{x:0.78,y:0.71},{x:0.96,y:0.70});   // 出口は少し下ってから水平（谷＝剥がれない）
+      return cp;
+    }
+    function presetJump(){
+      return [{x:0.05,y:0.16},{x:0.16,y:0.34},{x:0.28,y:0.54},{x:0.40,y:0.66},
+              {x:0.52,y:0.60},{x:0.60,y:0.46},{x:0.66,y:0.34}];   // 上向きの キッカーで 飛び出す
+    }
+    function presetCoaster(){
+      const cp=[{x:0.04,y:0.12},{x:0.12,y:0.28},{x:0.20,y:0.50},{x:0.27,y:0.38},
+                {x:0.33,y:0.28},{x:0.40,y:0.42},{x:0.47,y:0.56}];
+      const cx=0.60, cy=0.45, Rpx=0.145*Math.min(W,H), rx=Rpx/W, ry=Rpx/H;
+      for (let d=255; d<=645; d+=10){ const a=d*Math.PI/180; cp.push({x:cx+rx*Math.cos(a), y:cy - ry*Math.sin(a)}); }
+      cp.push({x:0.76,y:0.64},{x:0.84,y:0.52},{x:0.90,y:0.62},{x:0.96,y:0.74});
+      return cp;
+    }
+    const PRESETS = { loop:presetLoop, jump:presetJump, coaster:presetCoaster };
+
+    let curPreset="loop", curNorm=null, drawing=false, rawDraw=[];
+    function loadPreset(name){
+      curPreset=name;
+      if (name==="draw"){ curNorm=null; TRACK.N=0; return; }
+      curNorm=PRESETS[name]();
+      TRACK.buildFromNorm(curNorm);
+      BALL.reset();
+    }
+
+    // =============== 描画 ===============
+    function arrow(x,y, dx,dy, color, label){
+      const l=Math.hypot(dx,dy); if (l<3) return;
+      const ux=dx/l, uy=dy/l;
+      ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=3; ctx.lineCap="round";
+      ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+dx,y+dy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+dx,y+dy);
+      ctx.lineTo(x+dx-ux*11+uy*6, y+dy-uy*11-ux*6);
+      ctx.lineTo(x+dx-ux*11-uy*6, y+dy-uy*11+ux*6);
+      ctx.closePath(); ctx.fill();
+      if (label){ ctx.font="bold 12px sans-serif"; ctx.textAlign="center";
+        ctx.fillText(label, x+dx+ux*4, y+dy-6); }
+    }
+    function drawEnergyHUD(c){
+      if (G<=0 || !c) return;
+      const h = Math.max(0, TRACK.maxY - c.y);
+      const PE = G*h, KE = 0.5*c.speed*c.speed, TOT = PE+KE;
+      const E0 = Math.max(BALL.E0, TOT, 1);
+      const bx=14, by=56, bw=26, bh=150;
+      ctx.fillStyle="rgba(255,255,255,.08)"; ctx.fillRect(bx,by,bw,bh);
+      const keH=bh*clamp(KE/E0,0,1), peH=bh*clamp(PE/E0,0,1);
+      ctx.fillStyle="#ff6a5a"; ctx.fillRect(bx, by+bh-keH, bw, keH);             // うんどう（KE）下
+      ctx.fillStyle="#5aa0ff"; ctx.fillRect(bx, by+bh-keH-peH, bw, peH);         // いち（PE）上
+      ctx.strokeStyle="rgba(255,255,255,.5)"; ctx.lineWidth=1; ctx.strokeRect(bx+0.5,by+0.5,bw,bh);
+      // 初期エネルギーの線（摩擦で合計が下がる＝熱）
+      ctx.strokeStyle="rgba(255,255,255,.7)"; ctx.setLineDash([3,3]); ctx.beginPath();
+      ctx.moveTo(bx-3,by); ctx.lineTo(bx+bw+3,by); ctx.stroke(); ctx.setLineDash([]);
+      ctx.font="bold 11px sans-serif"; ctx.textAlign="left"; ctx.textBaseline="middle";
+      ctx.fillStyle="#5aa0ff"; ctx.fillText("いち", bx+bw+6, by+10);
+      ctx.fillStyle="#ff6a5a"; ctx.fillText("うんどう", bx+bw+6, by+bh-10);
+      ctx.fillStyle="rgba(255,255,255,.6)"; ctx.fillText("ごうけい(さいしょ)", bx+bw+6, by-2);
+      ctx.textBaseline="alphabetic";
+      ctx.fillStyle="rgba(255,255,255,.85)"; ctx.font="bold 13px sans-serif"; ctx.textAlign="left";
+      ctx.fillText("はやさ: "+(c.speed/100).toFixed(1)+" m/s", bx, by+bh+22);
+    }
+    function draw(){
+      // 背景（空→地面）
+      const sky=ctx.createLinearGradient(0,0,0,H); sky.addColorStop(0,"#0e1830"); sky.addColorStop(1,"#13203a");
+      ctx.fillStyle=sky; ctx.fillRect(0,0,W,H);
+      // 描画中のレール
+      if (curPreset==="draw" && TRACK.N<2){
+        if (rawDraw.length>1){ ctx.strokeStyle="#9fe0ff"; ctx.lineWidth=5; ctx.lineCap="round"; ctx.lineJoin="round";
+          ctx.beginPath(); ctx.moveTo(rawDraw[0].x,rawDraw[0].y); for (let i=1;i<rawDraw.length;i++) ctx.lineTo(rawDraw[i].x,rawDraw[i].y); ctx.stroke(); }
+        else { ctx.fillStyle="rgba(255,255,255,.5)"; ctx.font="bold 18px sans-serif"; ctx.textAlign="center";
+          ctx.fillText("✏️ ゆびで コースを かいてね", W/2, H/2); }
+      }
+      // レール
+      if (TRACK.N>1){
+        // 枕木
+        ctx.strokeStyle="rgba(150,170,210,.35)"; ctx.lineWidth=2;
+        for (let i=0;i<TRACK.N;i+=6){ const nx=TRACK.TY[i], ny=-TRACK.TX[i];
+          ctx.beginPath(); ctx.moveTo(TRACK.X[i]-nx*7, TRACK.Y[i]-ny*7); ctx.lineTo(TRACK.X[i]+nx*7, TRACK.Y[i]+ny*7); ctx.stroke(); }
+        ctx.strokeStyle="#cfe3ff"; ctx.lineWidth=5; ctx.lineCap="round"; ctx.lineJoin="round";
+        ctx.beginPath(); ctx.moveTo(TRACK.X[0],TRACK.Y[0]);
+        for (let i=1;i<TRACK.N;i++) ctx.lineTo(TRACK.X[i],TRACK.Y[i]); ctx.stroke();
+      }
+      // 玉
+      const c=BALL.cur();
+      if (c){
+        const r=15;
+        const bg=ctx.createRadialGradient(c.x-r*0.3,c.y-r*0.35,r*0.2,c.x,c.y,r);
+        bg.addColorStop(0, BALL.lost?"#ffd1a0":"#ffe08a"); bg.addColorStop(1, BALL.lost?"#e2693b":"#e2a93b");
+        ctx.fillStyle=bg; ctx.beginPath(); ctx.arc(c.x,c.y,r,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle="rgba(255,255,255,.6)"; ctx.beginPath(); ctx.arc(c.x-r*0.32,c.y-r*0.36,r*0.24,0,Math.PI*2); ctx.fill();
+        // 力ベクトル
+        if (showForces){
+          arrow(c.x,c.y, c.vx*0.28, c.vy*0.28, "#7dff9b", "そくど");            // 速度
+          if (G>0) arrow(c.x,c.y, 0, G*0.07, "#ff6a6a", "じゅうりょく");           // 重力
+          if (!BALL.detached && c.sm){                                          // 遠心力（外向き=-n̂）
+            const ks=c.sm.ks, nx=c.sm.ty, ny=-c.sm.tx; const cf=c.speed*c.speed*ks;
+            arrow(c.x,c.y, -nx*cf*0.08, -ny*cf*0.08, "#ffd43b", "えんしんりょく");
+          }
+        }
+      }
+      drawEnergyHUD(c);
+      // コースアウト／ゴール 表示
+      if (BALL.lost){ ctx.fillStyle="#ff8a5c"; ctx.font="bold 18px sans-serif"; ctx.textAlign="center";
+        ctx.fillText("💥 コースアウト！ はやさが たりない！", W/2, 34); }
+      // 世界ラベル
+      ctx.fillStyle="rgba(255,255,255,.5)"; ctx.font="bold 12px sans-serif"; ctx.textAlign="right";
+      const gname={earth:"🌍 ちきゅう 1.0g", moon:"🌙 つき 0.16g", space:"🚀 うちゅう 0g"}[gravKey];
+      const fname={ice:"❄️ こおり", normal:"🛣️ ふつう", sand:"🏖️ すなば"}[fricKey];
+      ctx.fillText(gname+"　"+fname, W-12, 22);
+    }
+
+    // =============== ループ ===============
+    let running=true, lastT=0;
+    function frame(now){
+      if (!running) return;
+      if (!lastT) lastT=now;
+      let dt=(now-lastT)/1000; lastT=now; if (dt>0.05) dt=0.05;
+      BALL.step(dt);
+      draw();
+      requestAnimationFrame(frame);
+    }
+
+    // =============== リサイズ ===============
+    function fitCanvas(){
+      const rect=canvas.getBoundingClientRect();
+      W=rect.width; H=rect.height; DPR=Math.min(2, window.devicePixelRatio||1);
+      canvas.width=Math.round(W*DPR); canvas.height=Math.round(H*DPR);
+      ctx.setTransform(DPR,0,0,DPR,0,0);
+      if (curNorm){ TRACK.buildFromNorm(curNorm); BALL.reset(); }
+    }
+
+    // =============== 入力（おえかき）===============
+    function pos(e){ const r=canvas.getBoundingClientRect(); return { x:e.clientX-r.left, y:e.clientY-r.top }; }
+    canvas.addEventListener("pointerdown",(e)=>{
+      if (curPreset!=="draw") return;
+      e.preventDefault(); drawing=true; rawDraw=[pos(e)]; TRACK.N=0; curNorm=null; canvas.setPointerCapture(e.pointerId);
+    });
+    canvas.addEventListener("pointermove",(e)=>{ if (!drawing) return; const p=pos(e);
+      const last=rawDraw[rawDraw.length-1]; if (Math.hypot(p.x-last.x,p.y-last.y)>4) rawDraw.push(p); });
+    function endDraw(e){
+      if (!drawing) return; drawing=false; try{canvas.releasePointerCapture(e.pointerId);}catch(_){}
+      if (rawDraw.length>3){ TRACK.buildFromPx(rawDraw); curNorm=rawDraw.map(p=>({x:p.x/W,y:p.y/H})); BALL.reset(); }
+    }
+    canvas.addEventListener("pointerup",endDraw);
+    canvas.addEventListener("pointercancel",endDraw);
+
+    // =============== UI ===============
+    const TIPS = {
+      loop:"玉は 高いところの「いち エネルギー」が、下って「うんどう エネルギー」に かわって はやくなる。ループの てっぺんは はやさが たりないと コースアウト！",
+      jump:"さかを 下って スピードを つけ、キッカーから とびだして 放物線で ジャンプ！ 重力や ゆかを かえて とび方を くらべよう。",
+      coaster:"山で ふわっと、ループで ぐるん。「ちからを みる」で 速度・重力・遠心力の 矢印が 見えるよ。",
+      draw:"ゆびで 自由に コースを かいてみよう！ ループや ジャンプだいも 作れる。かき終わると 玉が ころがり出す。"
+    };
+    function setTip(){ tipEl.textContent = TIPS[curPreset]; }
+    const presetBtns=[...document.querySelectorAll("[data-preset]")];
+    presetBtns.forEach(b=>b.addEventListener("click",()=>{
+      presetBtns.forEach(x=>x.classList.toggle("on",x===b));
+      loadPreset(b.dataset.preset); setTip();
+    }));
+    const fricBtns=[...document.querySelectorAll("[data-fric]")];
+    fricBtns.forEach(b=>b.addEventListener("click",()=>{
+      fricBtns.forEach(x=>x.classList.toggle("on",x===b)); fricKey=b.dataset.fric; MU=FRIC[fricKey];
+    }));
+    document.querySelectorAll("[data-grav]").forEach(tab=>tab.addEventListener("click",()=>{
+      if (gravKey===tab.dataset.grav) return; gravKey=tab.dataset.grav; G=GRAV[gravKey];
+      document.querySelectorAll("[data-grav]").forEach(t=>t.classList.toggle("active", t===tab));
+      BALL.reset();
+    }));
+    document.getElementById("forceBtn").addEventListener("click",(e)=>{ showForces=!showForces; e.currentTarget.classList.toggle("on",showForces); });
+    document.getElementById("againBtn").addEventListener("click",()=>{ if (TRACK.N>1) BALL.reset(); });
+
+    document.addEventListener("visibilitychange",()=>{ running=!document.hidden; if (running){ lastT=0; requestAnimationFrame(frame); } });
+    window.addEventListener("resize", fitCanvas);
+    window.addEventListener("load",()=>{ fitCanvas(); });
+
+    fitCanvas(); loadPreset("loop"); setTip(); requestAnimationFrame(frame);
+  })();
+
+  if ("serviceWorker" in navigator) { navigator.serviceWorker.register("/service-worker.js").catch(()=>{}); }
+  </script>
+</body>
+</html>

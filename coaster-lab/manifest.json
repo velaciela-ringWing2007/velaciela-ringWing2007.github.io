@@ -1,0 +1,18 @@
+{
+  "name": "ころころ ジェットコースター",
+  "short_name": "コースター",
+  "description": "レールの上を転がる玉で、位置エネルギーと運動エネルギーの移り変わり・摩擦・遠心力を遊びながら学べる子供向けアプリ",
+  "start_url": "/coaster-lab/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#101521",
+  "theme_color": "#0b0e14",
+  "icons": [
+    {
+      "src": "../icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
