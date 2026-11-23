@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0b0e14">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>おとの なみ</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="../icons/icon.svg">
+  <style>
+    :root { --ui-bg:#101521; --ui-panel:#1d2436; --ui-text:#eef2fa; --ui-sub:#9fa9c0; --accent:#ffd43b; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin:0; padding:0; height:100%;
+      font-family:"Hiragino Maru Gothic ProN","Yu Gothic UI","Segoe UI",system-ui,sans-serif;
+      background:var(--ui-bg); color:var(--ui-text); overscroll-behavior:none;
+      -webkit-user-select:none; user-select:none; }
+    body { display:flex; flex-direction:column; }
+    header { padding:10px 12px 4px; text-align:center; }
+    h1 { margin:0 0 8px; font-size:1.2rem; letter-spacing:.04em; }
+    .mode-tabs { display:flex; gap:8px; justify-content:center; max-width:620px; margin:0 auto; }
+    .mode-tab { flex:1; padding:10px 6px; border:2px solid transparent; border-radius:16px;
+      background:var(--ui-panel); color:var(--ui-sub); font-size:1rem; font-weight:700; cursor:pointer; line-height:1.3;
+      transition:transform .08s ease, border-color .15s ease, color .15s ease; }
+    .mode-tab .emoji { font-size:1.35rem; display:block; }
+    .mode-tab:active { transform:scale(.96); }
+    .mode-tab.active { color:var(--ui-text); border-color:var(--accent); background:#273049; }
+    .stage-wrap { flex:1; position:relative; margin:8px 10px; border-radius:18px; overflow:hidden;
+      box-shadow:0 0 0 2px rgba(255,255,255,.06); touch-action:none; }
+    #stage { position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+    .toolbar { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; padding:6px 10px 0; }
+    .btn { border:none; border-radius:12px; padding:9px 16px; font-size:.9rem; font-weight:700;
+      background:var(--ui-panel); color:var(--ui-text); cursor:pointer; }
+    .btn:active { transform:scale(.96); }
+    .btn.on { background:var(--accent); color:#332a00; }
+    .ctl-row { display:flex; gap:10px; justify-content:center; align-items:center; flex-wrap:wrap; padding:4px 14px 0; }
+    .ctl-row label { color:var(--ui-sub); font-size:.82rem; font-weight:700; white-space:nowrap; }
+    .ctl-row input[type=range] { flex:1; min-width:120px; max-width:240px; accent-color:var(--accent); height:24px; cursor:pointer; }
+    .ctl-row .val { color:var(--accent); font-size:.84rem; font-weight:700; min-width:3.6em; text-align:left; }
+    .ctl-wrap { padding-bottom:calc(2px + env(safe-area-inset-bottom)); }
+    .tip { text-align:center; color:var(--ui-sub); font-size:.74rem; padding:4px 12px 2px; line-height:1.5; }
+    a.home { color:var(--ui-sub); font-size:.78rem; text-decoration:none; }
+    a.home:active { color:var(--accent); }
+    .hidden { display:none !important; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🔊 おとの なみ</h1>
+    <div class="mode-tabs">
+      <button class="mode-tab active" data-mode="ripple"><span class="emoji">💧</span>はもん</button>
+      <button class="mode-tab" data-mode="doppler"><span class="emoji">🚑</span>ドップラー</button>
+      <button class="mode-tab" data-mode="voice"><span class="emoji">🎤</span>こえ</button>
+    </div>
+  </header>
+
+  <div class="stage-wrap">
+    <canvas id="stage"></canvas>
+  </div>
+
+  <div class="ctl-wrap">
+    <!-- はもん -->
+    <div id="rip-ctl">
+      <div class="toolbar">
+        <button class="btn on" id="rtWave" data-tool="wave">さわって なみ</button>
+        <button class="btn" id="rtSrc" data-tool="source">おんげんを おく</button>
+        <button class="btn" id="rtWall" data-tool="wall">かべを おく</button>
+        <button class="btn" id="ripReset">さいしょから</button>
+      </div>
+      <div class="ctl-row">
+        <label for="ripFreq">🎵 たかさ</label>
+        <input type="range" id="ripFreq" min="60" max="420" value="230" step="2" aria-label="音の高さ（周波数）">
+        <span class="val" id="ripFreqV"></span>
+      </div>
+      <div class="ctl-row">
+        <label for="ripAmp">📏 おおきさ</label>
+        <input type="range" id="ripAmp" min="20" max="140" value="80" step="2" aria-label="波の大きさ（振幅）">
+        <span class="val" id="ripAmpV"></span>
+      </div>
+    </div>
+
+    <!-- ドップラー -->
+    <div id="dop-ctl" class="hidden">
+      <div class="toolbar">
+        <button class="btn" id="dopSound">🔈 おとを だす</button>
+        <button class="btn" id="dopReset">さいしょから</button>
+      </div>
+      <div class="ctl-row">
+        <label for="dopSpeed">🚑 はやさ</label>
+        <input type="range" id="dopSpeed" min="10" max="260" value="80" step="2" aria-label="救急車の速さ">
+        <span class="val" id="dopSpeedV"></span>
+      </div>
+    </div>
+
+    <!-- こえ -->
+    <div id="voice-ctl" class="hidden">
+      <div class="toolbar">
+        <button class="btn" id="micBtn">🎤 マイクを つかう</button>
+      </div>
+    </div>
+
+    <p class="tip" id="tip"></p>
+    <p class="tip"><a class="home" href="../index.html">← ツール いちらんへ</a></p>
+  </div>
+
+  <script>
+  (function () {
+    "use strict";
+    const canvas = document.getElementById("stage");
+    const ctx = canvas.getContext("2d", { alpha:false });
+    const tipEl = document.getElementById("tip");
+
+    let W=0, H=0, DPR=1, TIME=0;
+    let currentMode = "ripple";
+    const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+
+    // ========== 共有オーディオ（ユーザー操作で初期化）==========
+    let AC = null;
+    function audioCtx(){
+      if (!AC){ const C = window.AudioContext || window.webkitAudioContext; if (C) AC = new C(); }
+      if (AC && AC.state === "suspended") AC.resume();
+      return AC;
+    }
+
+    // =====================================================================
+    // 💧 はもん（2次元波動方程式・干渉・反射）
+    // =====================================================================
+    const RIPPLE = {
+      GW:0, GH:0, u:null, v:null, damp:null, solid:null,
+      sources:[], tool:"wave", freq:2.4, amp:0.8, t:0,
+      buf:document.createElement("canvas"), bctx:null, img:null,
+      make(){
+        this.GW = 230; this.GH = clamp(Math.round(this.GW * H / Math.max(W,1)), 60, 320);
+        const n = this.GW*this.GH;
+        this.u=new Float32Array(n); this.v=new Float32Array(n);
+        this.damp=new Float32Array(n); this.solid=new Uint8Array(n);
+        this.t=0;
+        // 減衰場：画面のふちは吸収（反射を抑えて干渉を見やすく）
+        const margin=16;
+        for (let y=0;y<this.GH;y++) for (let x=0;x<this.GW;x++){
+          const edge=Math.min(x,y,this.GW-1-x,this.GH-1-y);
+          let d=0.9992;
+          if (edge<margin){ const f=edge/margin; d=0.86+0.1392*f; }
+          this.damp[y*this.GW+x]=d;
+        }
+        // 最初から 2つの音源 → 干渉のしま が すぐ見える
+        this.sources=[
+          { gx:Math.round(this.GW*0.40), gy:Math.round(this.GH*0.50) },
+          { gx:Math.round(this.GW*0.60), gy:Math.round(this.GH*0.50) }
+        ];
+        this.buf.width=this.GW; this.buf.height=this.GH;
+        this.bctx=this.buf.getContext("2d");
+        this.img=this.bctx.createImageData(this.GW,this.GH);
+      },
+      idx(gx,gy){ return gy*this.GW+gx; },
+      g2p(gx,gy){ return { x:(gx+0.5)/this.GW*W, y:(gy+0.5)/this.GH*H }; },
+      p2g(px,py){ return { gx:clamp(Math.floor(px/W*this.GW),0,this.GW-1), gy:clamp(Math.floor(py/H*this.GH),0,this.GH-1) }; },
+      addImpulse(gx,gy){
+        const R=4, s=this.amp*1.6;
+        for (let dy=-R;dy<=R;dy++) for (let dx=-R;dx<=R;dx++){
+          const x=gx+dx, y=gy+dy; if (x<1||y<1||x>=this.GW-1||y>=this.GH-1) continue;
+          const r2=dx*dx+dy*dy; if (r2>R*R) continue;
+          this.u[this.idx(x,y)] += Math.exp(-r2/(R*0.6))*s;
+        }
+      },
+      toggleSource(gx,gy){
+        // 近くに あれば消す、なければ足す（最大2個）
+        for (let i=0;i<this.sources.length;i++){
+          const s=this.sources[i]; if (Math.abs(s.gx-gx)<8 && Math.abs(s.gy-gy)<8){ this.sources.splice(i,1); return; }
+        }
+        if (this.sources.length<2) this.sources.push({gx,gy});
+      },
+      paintWall(gx,gy){
+        const R=3;
+        for (let dy=-R;dy<=R;dy++) for (let dx=-R;dx<=R;dx++){
+          const x=gx+dx, y=gy+dy; if (x<1||y<1||x>=this.GW-1||y>=this.GH-1) continue;
+          if (dx*dx+dy*dy<=R*R){ const i=this.idx(x,y); this.solid[i]=1; this.u[i]=0; this.v[i]=0; }
+        }
+      },
+      step(){
+        const GW=this.GW, GH=this.GH, u=this.u, v=this.v, damp=this.damp, solid=this.solid;
+        this.t += 1/60;
+        const sinVal = Math.sin(2*Math.PI*this.freq*this.t)*this.amp;
+        const src=[]; for (const s of this.sources){ const i=this.idx(s.gx,s.gy); if (!solid[i]){ u[i]=sinVal; src.push(i); } }
+        const K=0.22;   // 波の速さ^2·dt^2（CFL：<0.25で安定）
+        for (let y=1;y<GH-1;y++){ const row=y*GW;
+          for (let x=1;x<GW-1;x++){ const i=row+x; if (solid[i]) continue;
+            const l=solid[i-1]?u[i]:u[i-1], r=solid[i+1]?u[i]:u[i+1];
+            const up=solid[i-GW]?u[i]:u[i-GW], dn=solid[i+GW]?u[i]:u[i+GW];   // 壁は鏡（反射）
+            v[i] += K*(l+r+up+dn-4*u[i]);
+          }
+        }
+        for (let i=0,n=GW*GH;i<n;i++){ if (solid[i]){ u[i]=0; v[i]=0; continue; } u[i]=(u[i]+v[i])*damp[i]; v[i]*=damp[i]; }
+        for (const i of src) u[i]=sinVal;   // 音源は引き続き振動
+      },
+      draw(){
+        const GW=this.GW, GH=this.GH, u=this.u, solid=this.solid, d=this.img.data;
+        for (let i=0,n=GW*GH;i<n;i++){
+          const p=i*4;
+          if (solid[i]){ d[p]=120; d[p+1]=128; d[p+2]=142; d[p+3]=255; continue; }
+          let val=u[i]*2.4; if (val>1) val=1; else if (val<-1) val=-1;
+          let r,g,b;
+          if (val>=0){ r=16+val*70; g=34+val*158; b=66+val*189; }     // 山：明るい水色〜白
+          else { const a=-val; r=10+a*6; g=20+a*26; b=52+a*150; }     // 谷：濃い青
+          d[p]=r; d[p+1]=g; d[p+2]=b; d[p+3]=255;
+        }
+        this.bctx.putImageData(this.img,0,0);
+        ctx.imageSmoothingEnabled=true;
+        ctx.drawImage(this.buf,0,0,GW,GH,0,0,W,H);
+        // 音源マーカー
+        for (const s of this.sources){ const p=this.g2p(s.gx,s.gy);
+          ctx.beginPath(); ctx.arc(p.x,p.y,11,0,Math.PI*2);
+          ctx.fillStyle="rgba(255,212,59,.2)"; ctx.fill();
+          ctx.strokeStyle="#ffd43b"; ctx.lineWidth=2.5; ctx.stroke();
+          ctx.fillStyle="#ffd43b"; ctx.beginPath(); ctx.arc(p.x,p.y,3,0,Math.PI*2); ctx.fill();
+        }
+        // 干渉の説明バッジ
+        if (this.sources.length===2){
+          ctx.fillStyle="rgba(255,255,255,.8)"; ctx.font="bold 13px sans-serif"; ctx.textAlign="left";
+          ctx.fillText("あかるいしま＝強めあい／くらいすじ＝うちけしあい", 12, 22);
+        }
+      },
+      pointer(px,py,phase){
+        const g=this.p2g(px,py);
+        if (this.tool==="wave"){ if (phase!=="up") this.addImpulse(g.gx,g.gy); }
+        else if (this.tool==="source"){ if (phase==="down") this.toggleSource(g.gx,g.gy); }
+        else if (this.tool==="wall"){ if (phase!=="up") this.paintWall(g.gx,g.gy); }
+      }
+    };
+
+    // =====================================================================
+    // 🚑 ドップラー（動く音源・波面の圧縮／伸長・Web Audioで音程変化）
+    // =====================================================================
+    const DOPPLER = {
+      srcX:0, srcY:0, c:3.0, baseV:1.7, speed:1.0, rings:[], t:0, emitT:0,
+      listener:{x:0,y:0}, soundOn:false, osc:null, gain:null, f0:560,
+      make(){ this.srcX=-70; this.srcY=0.40*H; this.rings=[]; this.t=0; this.emitT=0;
+        this.listener={ x:0.5*W, y:0.80*H }; },
+      curV(){ return this.baseV*this.speed; },
+      supersonic(){ return this.curV() >= this.c; },
+      step(){
+        const v=this.curV();
+        this.srcX += v;
+        if (this.srcX > W+90){ this.srcX=-90; this.rings.length=0; this.t=0; this.emitT=0; }
+        this.t++;
+        if (--this.emitT<=0){ this.emitT=7; this.rings.push({x:this.srcX,y:this.srcY,t0:this.t}); if (this.rings.length>120) this.rings.shift(); }
+        if (this.soundOn && this.osc){
+          const dx=this.listener.x-this.srcX, dy=this.listener.y-this.srcY;
+          const dist=Math.hypot(dx,dy)||1, rx=dx/dist;
+          const vr=clamp(v*rx, -0.92*this.c, 0.92*this.c);       // 聞き手へ向かう速度成分
+          const fobs=this.f0 * this.c/(this.c - vr);             // 近づくと高く・遠ざかると低く
+          const g=clamp(0.14*(1 - dist/(Math.max(W,H))), 0.012, 0.14);
+          const now=AC?AC.currentTime:0;
+          this.osc.frequency.setTargetAtTime(clamp(fobs,120,2200), now, 0.02);
+          this.gain.gain.setTargetAtTime(g, now, 0.05);
+        }
+      },
+      toggleSound(){
+        const ac=audioCtx();
+        if (!ac){ return false; }
+        if (!this.soundOn){
+          this.osc=ac.createOscillator(); this.osc.type="sawtooth";
+          this.gain=ac.createGain(); this.gain.gain.value=0.0001;
+          this.osc.connect(this.gain).connect(ac.destination);
+          this.osc.frequency.value=this.f0; this.osc.start();
+          this.soundOn=true;
+        } else {
+          try{ this.gain.gain.setTargetAtTime(0.0001, ac.currentTime, 0.03); this.osc.stop(ac.currentTime+0.1);}catch(e){}
+          this.osc=null; this.gain=null; this.soundOn=false;
+        }
+        return this.soundOn;
+      },
+      draw(){
+        const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,"#0c1426"); g.addColorStop(1,"#0f1a30");
+        ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+        // 波面（発生点から c の速さで広がる円）。前方＝暖色（高音）／後方＝寒色（低音）
+        ctx.lineWidth=2;
+        for (const ring of this.rings){
+          const rad=(this.t-ring.t0)*this.c; if (rad<2||rad>Math.hypot(W,H)) continue;
+          const a=clamp(1 - rad/Math.hypot(W,H), 0.08, 0.9);
+          // 前半（進行方向＝右）＝赤、後半（左）＝青
+          ctx.strokeStyle="rgba(255,120,90,"+a+")";
+          ctx.beginPath(); ctx.arc(ring.x,ring.y,rad,-Math.PI/2,Math.PI/2); ctx.stroke();
+          ctx.strokeStyle="rgba(110,170,255,"+a+")";
+          ctx.beginPath(); ctx.arc(ring.x,ring.y,rad,Math.PI/2,Math.PI*1.5); ctx.stroke();
+        }
+        // 聞き手
+        const L=this.listener;
+        ctx.font="26px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillText("👂", L.x, L.y);
+        ctx.fillStyle="rgba(255,255,255,.4)"; ctx.font="bold 11px sans-serif";
+        ctx.fillText("ここで きく", L.x, L.y+22);
+        // 音源（救急車）
+        ctx.font="34px sans-serif"; ctx.textBaseline="middle"; ctx.textAlign="center";
+        ctx.fillText("🚑", this.srcX, this.srcY);
+        ctx.textBaseline="alphabetic";
+        // ラベル
+        ctx.textAlign="left"; ctx.font="bold 13px sans-serif";
+        ctx.fillStyle="rgba(255,140,110,.95)"; ctx.fillText("まえ＝つまって たかい音（赤）", 12, 22);
+        ctx.fillStyle="rgba(120,180,255,.95)"; ctx.fillText("うしろ＝のびて ひくい音（青）", 12, 40);
+        if (this.supersonic()){
+          ctx.textAlign="center"; ctx.fillStyle="#ffd43b"; ctx.font="bold 16px sans-serif";
+          ctx.fillText("💥 おとより はやい！ ソニックブーム！", W/2, 40);
+        }
+      }
+    };
+
+    // =====================================================================
+    // 🎤 こえ（マイク入力・オシロスコープ＆スペクトル。未許可はデモ波形）
+    // =====================================================================
+    const VOICE = {
+      analyser:null, src:null, stream:null, on:false, demoT:0,
+      wave:null, freq:null,
+      make(){ this.demoT=0; },
+      async start(){
+        const ac=audioCtx(); if (!ac) return false;
+        try{
+          const stream=await navigator.mediaDevices.getUserMedia({ audio:true });
+          this.stream=stream;
+          this.src=ac.createMediaStreamSource(stream);
+          this.analyser=ac.createAnalyser(); this.analyser.fftSize=2048; this.analyser.smoothingTimeConstant=0.75;
+          this.src.connect(this.analyser);           // 出力にはつながない（ハウリング防止）
+          this.wave=new Uint8Array(this.analyser.fftSize);
+          this.freq=new Uint8Array(this.analyser.frequencyBinCount);
+          this.on=true; return true;
+        } catch(e){ this.on=false; return false; }
+      },
+      stop(){
+        if (this.stream){ this.stream.getTracks().forEach(t=>t.stop()); this.stream=null; }
+        this.src=null; this.analyser=null; this.on=false;
+      },
+      step(){ if (!this.on) this.demoT+=1/60; },
+      draw(){
+        ctx.fillStyle="#0c1426"; ctx.fillRect(0,0,W,H);
+        const midY=H*0.33, specTop=H*0.55;
+        // --- 上：波形（オシロスコープ）---
+        ctx.strokeStyle="rgba(255,255,255,.12)"; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(0,midY); ctx.lineTo(W,midY); ctx.stroke();
+        ctx.lineWidth=2.4; ctx.lineCap="round"; ctx.strokeStyle="#7dff9b";
+        ctx.beginPath();
+        const N=512;
+        for (let i=0;i<N;i++){
+          const x=i/(N-1)*W; let s;
+          if (this.on){ const v=this.analyser; const buf=this.wave; if (i===0) v.getByteTimeDomainData(buf);
+            s=(buf[Math.floor(i/N*buf.length)]-128)/128; }
+          else { const t=this.demoT; s=0.5*Math.sin(i*0.05 + t*4) + 0.3*Math.sin(i*0.13 + t*6) + 0.12*Math.sin(i*0.31 + t*2); }
+          const y=midY - s*(H*0.22);
+          i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+        }
+        ctx.stroke();
+        // --- 下：周波数スペクトル（棒）---
+        let bins, blen;
+        if (this.on){ this.analyser.getByteFrequencyData(this.freq); bins=this.freq; blen=Math.min(bins.length, 220); }
+        else { blen=220; }
+        const bw=W/blen;
+        for (let i=0;i<blen;i++){
+          let h;
+          if (this.on){ h=(bins[i]/255)*(H-specTop-12); }
+          else { const t=this.demoT; const peak=(k,c,w)=>Math.exp(-((i-c)*(i-c))/(w*w))*k;
+            const amp=peak(0.9,14+2*Math.sin(t*1.3),6)+peak(0.6,40,9)+peak(0.4,80,14)+0.04;
+            h=amp*(0.6+0.4*Math.abs(Math.sin(t*3+i*0.2)))*(H-specTop-12); }
+          const x=i*bw, y=H-12-h;
+          const hue=200 - (i/blen)*200;
+          ctx.fillStyle="hsl("+hue+",80%,60%)";
+          ctx.fillRect(x+0.5, y, Math.max(1,bw-1), h);
+        }
+        ctx.fillStyle="rgba(255,255,255,.75)"; ctx.font="bold 13px sans-serif"; ctx.textAlign="left";
+        ctx.fillText(this.on ? "🎤 あなたの こえ の なみ" : "🎤 デモ波形（「マイクを つかう」で じぶんの声に）", 12, 22);
+        ctx.fillStyle="rgba(255,255,255,.5)"; ctx.font="bold 12px sans-serif";
+        ctx.fillText("うえ＝なみの かたち／した＝たかさ ごとの つよさ", 12, specTop-10);
+      }
+    };
+
+    // =====================================================================
+    const MODES = {
+      ripple:  { ref:RIPPLE,  tip:"画面を さわると なみが ひろがる。2つの音源で「明るいしま＝強めあい／暗いすじ＝打ち消し」。「おんげん」で音源を置く／消す（最大2こ）、「かべ」で反射板。" },
+      doppler: { ref:DOPPLER, tip:"🚑が 動くと、前は 波が つまって 高い音・後ろは のびて 低い音。「おとを だす」で 本物の音程変化も。はやさを上げると ソニックブーム！" },
+      voice:   { ref:VOICE,   tip:"「マイクを つかう」で じぶんの声の なみ と たかさ が 見える（きょかが いる）。許可しない間は デモ波形。" }
+    };
+
+    // ---- 描画ループ ----
+    let running=true;
+    function frame(){
+      if (!running) return;
+      TIME=performance.now()/1000;
+      if (dragging) MODES[currentMode].ref.pointer && MODES[currentMode].ref.pointer(lastP.x,lastP.y,"move");
+      const sc=MODES[currentMode].ref;
+      sc.step(); sc.draw();
+      requestAnimationFrame(frame);
+    }
+
+    // ---- リサイズ ----
+    function fitCanvas(){
+      const rect=canvas.getBoundingClientRect();
+      W=rect.width; H=rect.height; DPR=Math.min(2, window.devicePixelRatio||1);
+      canvas.width=Math.round(W*DPR); canvas.height=Math.round(H*DPR);
+      ctx.setTransform(DPR,0,0,DPR,0,0);
+      RIPPLE.make(); DOPPLER.make(); VOICE.make();
+    }
+
+    // ---- 入力 ----
+    let dragging=false, lastP={x:0,y:0};
+    function pos(e){ const r=canvas.getBoundingClientRect(); return { x:e.clientX-r.left, y:e.clientY-r.top }; }
+    canvas.addEventListener("pointerdown",(e)=>{
+      e.preventDefault(); lastP=pos(e); dragging=true; canvas.setPointerCapture(e.pointerId);
+      const sc=MODES[currentMode].ref; if (sc.pointer) sc.pointer(lastP.x,lastP.y,"down");
+    });
+    canvas.addEventListener("pointermove",(e)=>{ if (dragging) lastP=pos(e); });
+    function up(e){ if (!dragging) return; dragging=false;
+      const sc=MODES[currentMode].ref; if (sc.pointer) sc.pointer(lastP.x,lastP.y,"up");
+      try{ canvas.releasePointerCapture(e.pointerId);}catch(_){} }
+    canvas.addEventListener("pointerup",up);
+    canvas.addEventListener("pointercancel",up);
+
+    // ---- モード切替 ----
+    function applyMode(){
+      tipEl.textContent=MODES[currentMode].tip;
+      document.getElementById("rip-ctl").classList.toggle("hidden", currentMode!=="ripple");
+      document.getElementById("dop-ctl").classList.toggle("hidden", currentMode!=="doppler");
+      document.getElementById("voice-ctl").classList.toggle("hidden", currentMode!=="voice");
+      document.querySelectorAll(".mode-tab").forEach(t=>t.classList.toggle("active", t.dataset.mode===currentMode));
+      if (currentMode!=="voice" && VOICE.on) { /* マイクは触らない：他モードでも継続可だが止める */ }
+    }
+    document.querySelectorAll(".mode-tab").forEach(tab=>{
+      tab.addEventListener("click",()=>{ if (currentMode===tab.dataset.mode) return;
+        if (currentMode==="voice" && VOICE.on) VOICE.stop();   // マイクはモードを離れたら停止
+        if (currentMode==="doppler" && DOPPLER.soundOn) { DOPPLER.toggleSound(); dopSound.classList.remove("on"); dopSound.textContent="🔈 おとを だす"; }
+        currentMode=tab.dataset.mode; applyMode();
+      });
+    });
+
+    // ---- はもん：ツール＆スライダー ----
+    const ripToolBtns=[document.getElementById("rtWave"),document.getElementById("rtSrc"),document.getElementById("rtWall")];
+    ripToolBtns.forEach(b=>b.addEventListener("click",()=>{ RIPPLE.tool=b.dataset.tool; ripToolBtns.forEach(x=>x.classList.toggle("on",x===b)); }));
+    document.getElementById("ripReset").addEventListener("click",()=>{ RIPPLE.make(); });
+    const ripFreq=document.getElementById("ripFreq"), ripFreqV=document.getElementById("ripFreqV");
+    const ripAmp=document.getElementById("ripAmp"), ripAmpV=document.getElementById("ripAmpV");
+    function applyRipFreq(){ const hz=+ripFreq.value; RIPPLE.freq=hz/100; ripFreqV.textContent=hz+" Hz"; }
+    function applyRipAmp(){ const a=+ripAmp.value; RIPPLE.amp=a/100; ripAmpV.textContent=(a/100).toFixed(2); }
+    ripFreq.addEventListener("input",applyRipFreq); ripAmp.addEventListener("input",applyRipAmp);
+    applyRipFreq(); applyRipAmp();
+
+    // ---- ドップラー：音＆はやさ ----
+    const dopSound=document.getElementById("dopSound");
+    dopSound.addEventListener("click",()=>{ const on=DOPPLER.toggleSound();
+      dopSound.classList.toggle("on",on); dopSound.textContent=on?"🔊 おと ON（とめる）":"🔈 おとを だす"; });
+    document.getElementById("dopReset").addEventListener("click",()=>{ DOPPLER.make(); });
+    const dopSpeed=document.getElementById("dopSpeed"), dopSpeedV=document.getElementById("dopSpeedV");
+    function applyDopSpeed(){ const s=+dopSpeed.value; DOPPLER.speed=s/50; // 0.2〜5.2倍（音速 baseV*speed vs c）
+      const mach=(DOPPLER.baseV*DOPPLER.speed)/DOPPLER.c;
+      dopSpeedV.textContent="マッハ "+mach.toFixed(2); }
+    dopSpeed.addEventListener("input",applyDopSpeed); applyDopSpeed();
+
+    // ---- こえ：マイク ----
+    const micBtn=document.getElementById("micBtn");
+    micBtn.addEventListener("click",async ()=>{
+      if (VOICE.on){ VOICE.stop(); micBtn.classList.remove("on"); micBtn.textContent="🎤 マイクを つかう"; return; }
+      micBtn.textContent="… きょか まち"; const ok=await VOICE.start();
+      if (ok){ micBtn.classList.add("on"); micBtn.textContent="🎤 マイク ON（とめる）"; }
+      else { micBtn.classList.remove("on"); micBtn.textContent="🎤 マイクを つかう（デモ中）"; }
+    });
+
+    document.addEventListener("visibilitychange",()=>{ running=!document.hidden; if (running) frame(); });
+    window.addEventListener("resize", fitCanvas);
+    window.addEventListener("load",()=>{ fitCanvas(); applyMode(); });
+
+    fitCanvas(); applyMode(); frame();
+  })();
+
+  if ("serviceWorker" in navigator) { navigator.serviceWorker.register("/service-worker.js").catch(()=>{}); }
+  </script>
+</body>
+</html>
