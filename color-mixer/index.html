@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#111318">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>いろ まぜまぜ</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="../icons/icon.svg">
+  <style>
+    :root {
+      --ui-bg: #1b1e26;
+      --ui-panel: #232734;
+      --ui-text: #f2f4f8;
+      --ui-sub: #aab2c5;
+      --accent: #ffd43b;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      font-family: "Hiragino Maru Gothic ProN", "Yu Gothic UI", "Segoe UI", system-ui, sans-serif;
+      background: var(--ui-bg);
+      color: var(--ui-text);
+      overscroll-behavior: none;
+      -webkit-user-select: none; user-select: none;
+    }
+    body { display: flex; flex-direction: column; }
+
+    /* ===== ヘッダー / モード切り替え ===== */
+    header {
+      padding: 10px 12px 6px;
+      text-align: center;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 1.25rem;
+      letter-spacing: .04em;
+    }
+    .mode-tabs {
+      display: flex; gap: 8px; justify-content: center;
+      max-width: 520px; margin: 0 auto;
+    }
+    .mode-tab {
+      flex: 1;
+      padding: 12px 6px;
+      border: 2px solid transparent;
+      border-radius: 16px;
+      background: var(--ui-panel);
+      color: var(--ui-sub);
+      font-size: 1rem; font-weight: 700;
+      cursor: pointer;
+      transition: transform .08s ease, border-color .15s ease, color .15s ease;
+      line-height: 1.3;
+    }
+    .mode-tab .emoji { font-size: 1.4rem; display: block; }
+    .mode-tab:active { transform: scale(.96); }
+    .mode-tab.active {
+      color: var(--ui-text);
+      border-color: var(--accent);
+      background: #2c3243;
+    }
+
+    /* ===== ステージ ===== */
+    .stage-wrap {
+      flex: 1;
+      position: relative;
+      margin: 8px 10px;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 6px 24px rgba(0,0,0,.4) inset, 0 0 0 2px rgba(255,255,255,.06);
+    }
+    #stage {
+      position: absolute; inset: 0;
+      isolation: isolate;        /* ブレンドをステージ内に閉じ込める */
+      touch-action: none;
+      transition: background-color .35s ease;
+      cursor: default;
+    }
+    #stage.light { background: #000; }
+    #stage.glass { background: #fff; }
+
+    .hint {
+      position: absolute; left: 50%; bottom: 10px;
+      transform: translateX(-50%);
+      padding: 7px 14px;
+      border-radius: 999px;
+      font-size: .82rem; font-weight: 700;
+      max-width: calc(100% - 20px);
+      white-space: normal; text-align: center;
+      pointer-events: none;
+      z-index: 9999;
+      background: rgba(0,0,0,.08); color: #2a2d36;   /* ガラス(白背景)用の既定 */
+      transition: color .35s ease, background-color .35s ease;
+    }
+    .hint.on-light { background: rgba(255,255,255,.14); color: #fff; }  /* 光(黒背景)用 */
+
+    /* ===== 円（光／ガラス） ===== */
+    .disk {
+      position: absolute;
+      width: var(--size, 128px);
+      height: var(--size, 128px);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      touch-action: none;
+      cursor: grab;
+      will-change: left, top;
+    }
+    .disk.dragging { cursor: grabbing; }
+    .disk.light {
+      mix-blend-mode: screen;
+      box-shadow: 0 0 26px 6px currentColor;
+    }
+    .disk.glass {
+      mix-blend-mode: multiply;
+      box-shadow: 0 2px 10px rgba(0,0,0,.25);
+    }
+    /* ガラスっぽい光沢（薬のように全体へは効かせない） */
+    .disk.glass::after {
+      content: "";
+      position: absolute;
+      top: 12%; left: 16%;
+      width: 34%; height: 24%;
+      border-radius: 50%;
+      background: rgba(255,255,255,.35);
+      filter: blur(2px);
+    }
+
+    /* ===== パレット ===== */
+    .palette {
+      display: flex; gap: 14px; justify-content: center; flex-wrap: wrap;
+      padding: 10px 10px calc(8px + env(safe-area-inset-bottom));
+    }
+    .swatch {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      cursor: pointer;
+      border: none; background: none; padding: 0;
+    }
+    .swatch .chip {
+      width: 54px; height: 54px; border-radius: 50%;
+      border: 3px solid rgba(255,255,255,.25);
+      box-shadow: 0 2px 8px rgba(0,0,0,.35);
+      transition: transform .08s ease;
+    }
+    .swatch:active .chip { transform: scale(.9); }
+    .swatch .label { font-size: .78rem; color: var(--ui-sub); font-weight: 700; }
+
+    .toolbar {
+      display: flex; gap: 10px; justify-content: center;
+      padding: 0 10px 6px;
+    }
+    .btn {
+      border: none; border-radius: 12px;
+      padding: 9px 16px;
+      font-size: .9rem; font-weight: 700;
+      background: var(--ui-panel); color: var(--ui-text);
+      cursor: pointer;
+    }
+    .btn:active { transform: scale(.96); }
+    .btn.primary { background: var(--accent); color: #332a00; }
+
+    .tip {
+      text-align: center; color: var(--ui-sub);
+      font-size: .74rem; padding: 0 12px 6px; line-height: 1.5;
+    }
+    a.home { color: var(--ui-sub); font-size: .78rem; text-decoration: none; }
+    a.home:active { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🎨 いろ まぜまぜ</h1>
+    <div class="mode-tabs">
+      <button class="mode-tab active" data-mode="light">
+        <span class="emoji">💡</span>ひかりの いろ
+      </button>
+      <button class="mode-tab" data-mode="glass">
+        <span class="emoji">🔷</span>いろガラス
+      </button>
+    </div>
+  </header>
+
+  <div class="stage-wrap">
+    <div id="stage" class="light"></div>
+    <div class="hint" id="hint"></div>
+  </div>
+
+  <div class="palette" id="palette"></div>
+
+  <div class="toolbar">
+    <button class="btn" id="resetBtn">さいしょから</button>
+    <button class="btn" id="clearBtn">ぜんぶ けす</button>
+  </div>
+
+  <p class="tip" id="tip"></p>
+  <p class="tip"><a class="home" href="../index.html">← ツール いちらんへ</a></p>
+
+  <script>
+  (function () {
+    "use strict";
+
+    const MODES = {
+      light: {
+        stageClass: "light",
+        diskClass: "light",
+        hintClass: "on-light",
+        hint: "💡 ひかりは かさねると あかるく！ あか＋みどり＋あお で しろ",
+        tip: "ひかり（光源）を かさねる と、いろが たしざん で あかるく なっていくよ（加法混色）。",
+        colors: [
+          { name: "あか",   hex: "#ff0000" },
+          { name: "みどり", hex: "#00ff00" },
+          { name: "あお",   hex: "#0000ff" }
+        ]
+      },
+      glass: {
+        stageClass: "glass",
+        diskClass: "glass",
+        hintClass: "",
+        hint: "🔷 いろガラスは かさねると くらく！ みず＋もも＋きいろ で くろ",
+        tip: "いろガラス を かさねる と、ひかりが すこしずつ すいとられて くらく なるよ（減法混色）。",
+        colors: [
+          { name: "みずいろ", hex: "#00ffff" },
+          { name: "もも",     hex: "#ff00ff" },
+          { name: "きいろ",   hex: "#ffff00" }
+        ]
+      }
+    };
+
+    const stage   = document.getElementById("stage");
+    const paletteEl = document.getElementById("palette");
+    const hintEl  = document.getElementById("hint");
+    const tipEl   = document.getElementById("tip");
+
+    let currentMode = "light";
+    let zCounter = 1;
+
+    function diskSize() {
+      const r = stage.getBoundingClientRect();
+      const s = Math.min(r.width, r.height) * 0.34;
+      return Math.max(78, Math.min(140, Math.round(s)));
+    }
+
+    function clearStage() {
+      stage.querySelectorAll(".disk").forEach(d => d.remove());
+    }
+
+    function spawnDisk(hex, cx, cy) {
+      const mode = MODES[currentMode];
+      const rect = stage.getBoundingClientRect();
+      const size = diskSize();
+      if (cx == null) {
+        cx = rect.width / 2 + (Math.random() - 0.5) * rect.width * 0.25;
+        cy = rect.height / 2 + (Math.random() - 0.5) * rect.height * 0.25;
+      }
+      const disk = document.createElement("div");
+      disk.className = "disk " + mode.diskClass;
+      disk.style.setProperty("--size", size + "px");
+      disk.style.background = hex;
+      disk.style.color = hex; // box-shadow の currentColor 用（光のグロー）
+      disk.style.left = cx + "px";
+      disk.style.top = cy + "px";
+      disk.style.zIndex = ++zCounter;
+      stage.appendChild(disk);
+      makeDraggable(disk);
+      return disk;
+    }
+
+    function makeDraggable(disk) {
+      let offsetX = 0, offsetY = 0;
+      let lastTap = 0;
+
+      disk.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        // ダブルタップ / ダブルクリックで消す
+        const now = Date.now();
+        if (now - lastTap < 300) {
+          disk.remove();
+          return;
+        }
+        lastTap = now;
+
+        disk.setPointerCapture(e.pointerId);
+        disk.classList.add("dragging");
+        disk.style.zIndex = ++zCounter;
+        const rect = stage.getBoundingClientRect();
+        offsetX = (e.clientX - rect.left) - parseFloat(disk.style.left);
+        offsetY = (e.clientY - rect.top) - parseFloat(disk.style.top);
+      });
+
+      disk.addEventListener("pointermove", (e) => {
+        if (!disk.classList.contains("dragging")) return;
+        const rect = stage.getBoundingClientRect();
+        let x = (e.clientX - rect.left) - offsetX;
+        let y = (e.clientY - rect.top) - offsetY;
+        const half = disk.offsetWidth / 2;
+        x = Math.max(half * 0.2, Math.min(rect.width - half * 0.2, x));
+        y = Math.max(half * 0.2, Math.min(rect.height - half * 0.2, y));
+        disk.style.left = x + "px";
+        disk.style.top = y + "px";
+      });
+
+      function endDrag(e) {
+        disk.classList.remove("dragging");
+        try { disk.releasePointerCapture(e.pointerId); } catch (_) {}
+      }
+      disk.addEventListener("pointerup", endDrag);
+      disk.addEventListener("pointercancel", endDrag);
+    }
+
+    function buildPalette() {
+      const mode = MODES[currentMode];
+      paletteEl.innerHTML = "";
+      mode.colors.forEach(c => {
+        const btn = document.createElement("button");
+        btn.className = "swatch";
+        btn.innerHTML =
+          '<span class="chip" style="background:' + c.hex + '"></span>' +
+          '<span class="label">' + c.name + '</span>';
+        btn.addEventListener("click", () => spawnDisk(c.hex));
+        paletteEl.appendChild(btn);
+      });
+    }
+
+    function placeDefaults() {
+      const mode = MODES[currentMode];
+      const rect = stage.getBoundingClientRect();
+      const cx = rect.width / 2, cy = rect.height / 2;
+      const r = Math.min(rect.width, rect.height) * 0.18;
+      // 正三角形っぽく少しだけ重なる配置
+      const angles = [-90, 30, 150];
+      mode.colors.forEach((c, i) => {
+        const a = angles[i % 3] * Math.PI / 180;
+        spawnDisk(c.hex, cx + r * Math.cos(a), cy + r * Math.sin(a));
+      });
+    }
+
+    function applyMode(reset) {
+      const mode = MODES[currentMode];
+      stage.className = mode.stageClass;
+      hintEl.textContent = mode.hint;
+      hintEl.className = "hint " + mode.hintClass;
+      tipEl.textContent = mode.tip;
+      document.querySelectorAll(".mode-tab").forEach(t => {
+        t.classList.toggle("active", t.dataset.mode === currentMode);
+      });
+      buildPalette();
+      if (reset) { clearStage(); placeDefaults(); }
+    }
+
+    // ===== イベント =====
+    document.querySelectorAll(".mode-tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        if (currentMode === tab.dataset.mode) return;
+        currentMode = tab.dataset.mode;
+        applyMode(true);
+      });
+    });
+    document.getElementById("clearBtn").addEventListener("click", clearStage);
+    document.getElementById("resetBtn").addEventListener("click", () => applyMode(true));
+
+    // ステージのサイズが決まってから初期配置
+    window.addEventListener("load", () => applyMode(true));
+    let resizeTimer;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        // 既存の円の大きさだけ更新（位置はそのまま）
+        const size = diskSize();
+        stage.querySelectorAll(".disk").forEach(d => d.style.setProperty("--size", size + "px"));
+      }, 200);
+    });
+
+    // 念のため load 前にも一度
+    applyMode(true);
+  })();
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/service-worker.js").catch(() => {});
+  }
+  </script>
+</body>
+</html>

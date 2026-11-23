@@ -38,6 +38,9 @@
 ├── paint-calculator/          # 塗料計算
 │   ├── index.html
 │   └── manifest.json
+├── color-mixer/               # いろ まぜまぜ（色合成）
+│   ├── index.html
+│   └── manifest.json
 ├── threat-map/                # 攻撃監視コンソール
 │   ├── index.html
 │   └── README.md
@@ -143,6 +146,21 @@ https://velaciela-ringWing2007.github.io/clock-print/
 https://velaciela-ringWing2007.github.io/paint-calculator/
 
 塗料の硬化剤・希釈液の配合量を計算。
+
+---
+
+## 🎨 いろ まぜまぜ
+
+https://velaciela-ringWing2007.github.io/color-mixer/
+
+子供向けの色合成アプリ。色を選んでドラッグし、重ねて混ざる様子を遊びながら学べます。
+
+### 機能
+
+- **ひかりの いろ（加法混色）** - 黒背景に赤・緑・青の光源を重ねる。重なると明るくなる（赤+緑=黄、3つで白）
+- **いろガラス（減法混色）** - 白背景にシアン・マゼンタ・イエローの色ガラスを重ねる。重なると暗くなる（水色+黄=緑、3つで黒）
+- **ドラッグ操作** - タップで色を出し、指/マウスで重ねる（重なり部分は `mix-blend-mode` で自動混色）
+- ダブルタップで1つ消す / ぜんぶ けす・さいしょから ボタン
 
 ---
 
