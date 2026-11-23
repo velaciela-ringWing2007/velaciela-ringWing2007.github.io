@@ -397,6 +397,7 @@
     const WG = {
       UINF: 2.4, R: 62, CAMBER: 0.10, alpha: 0.18, center: null, lines: [], parts: [], poly: [], shed: [], spawnT: 0,
       make() {
+        this.R = clamp(Math.min(W, H)*0.085, 54, 118);   // 画面サイズに合わせて翼を大きく（4Kでも見やすく）
         this.center = { x: 0.44*W, y: 0.5*H };
         this.alpha = 0.18;
         const ch=this.chord(), ca=Math.cos(this.alpha), sa=Math.sin(this.alpha);
@@ -551,11 +552,32 @@
           const pts = smoothPts(streamline(p=>this.field(p), {x:2, y}, 7, nStep), 1);
           this.lines.push({ pts, k:this.lines.length*0.7 });
         }
-        // 翼面にぴったり添う線（前縁のすぐ上／下から、翼面をなめるように流す）
+        // 前から来た風が前縁（よどみ点）に当たって上下に分かれる線を1本（前向きトレース＝安定）
+        const nose = this.pivot || this.center;
+        const sideAt = (y0)=>{   // nose.x での 流線の上下（<0=上を通る / >0=下を通る）
+          const pts=streamline(p=>this.field(p), {x:2, y:y0}, 6, Math.ceil(nose.x/6)+40);
+          for (let i=1;i<pts.length;i++){
+            if ((pts[i-1].x-nose.x)*(pts[i].x-nose.x) <= 0){
+              const t=(nose.x-pts[i-1].x)/((pts[i].x-pts[i-1].x)||1);
+              return (pts[i-1].y + t*(pts[i].y-pts[i-1].y)) - nose.y;
+            }
+          }
+          return pts[pts.length-1].y - nose.y;
+        };
+        let lo=this.center.y-1.4*this.R, hi=this.center.y+1.4*this.R, sLo=sideAt(lo), sHi=sideAt(hi);
+        if (sLo*sHi < 0){ for (let it=0;it<16;it++){ const mid=(lo+hi)/2, sm=sideAt(mid); if (sm*sLo<=0){hi=mid;sHi=sm;} else {lo=mid;sLo=sm;} } }
+        let sPts=streamline(p=>this.field(p), {x:2, y:(lo+hi)/2}, 6, Math.ceil(W/6));
+        let cut=sPts.length, best=1e18;
+        for (let i=0;i<sPts.length;i++){ const d=Math.hypot(sPts[i].x-nose.x, sPts[i].y-nose.y); if (d<best){ best=d; cut=i+1; } }
+        sPts=sPts.slice(0,cut);
+        const ep=sPts[sPts.length-1], na=this.nearest(ep);           // 実際の翼面（よどみ点）にスナップ
+        sPts.push({x: ep.x - na.nx*na.dist, y: ep.y - na.ny*na.dist, sp:0});
+        this.lines.push({ pts: smoothPts(sPts,1), k:this.lines.length*0.7, stag:true }); // よどみ線（明るく描く）
+        // 翼面にぴったり添う線（前縁のすぐ上／下から出して、翼面をなめるように流す＝前縁で分かれる）
         const nSkim = Math.ceil(W/4);
-        for (const skim of [4, 11, 19]){
-          this.lines.push({ pts: smoothPts(streamline(p=>this.field(p), this.skimSeed(0.03, true,  skim), 4, nSkim), 3), k:this.lines.length*0.7 });
-          this.lines.push({ pts: smoothPts(streamline(p=>this.field(p), this.skimSeed(0.03, false, skim), 4, nSkim), 3), k:this.lines.length*0.7 });
+        for (const skim of [2, 9, 16]){
+          this.lines.push({ pts: smoothPts(streamline(p=>this.field(p), this.skimSeed(0.0, true,  skim), 4, nSkim), 3), k:this.lines.length*0.7 });
+          this.lines.push({ pts: smoothPts(streamline(p=>this.field(p), this.skimSeed(0.0, false, skim), 4, nSkim), 3), k:this.lines.length*0.7 });
         }
       },
       seedP(start) {
@@ -599,7 +621,14 @@
         if (flowStyle==="stream"){
           for (const line of this.lines){
             const pts=line.pts; if (pts.length<2) continue;
-            drawSpeedPolyline(i=>pts[i], pts.length, smax, 1.9);
+            if (line.stag){   // よどみ線（前縁で分かれる）は明るく目立たせる
+              ctx.strokeStyle="rgba(223,232,255,.92)"; ctx.lineWidth=2.4; ctx.lineCap="round";
+              ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
+              for (let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x,pts[i].y);
+              ctx.stroke();
+            } else {
+              drawSpeedPolyline(i=>pts[i], pts.length, smax, 1.9);
+            }
           }
         } else {
           drawTrails(this.parts, smax);
