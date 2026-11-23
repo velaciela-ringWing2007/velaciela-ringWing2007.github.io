@@ -458,30 +458,40 @@
         return g*U*1.6*s*yf*sepCut;                            // 画面+y=下向き
       },
       field(pt) {
-        const U=this.UINF; const naF=this.nearest(pt);
+        const U=this.UINF, ch=this.chord(); const naF=this.nearest(pt);
         if (naF.inside) return { x:U*0.4 + naF.nx*U*0.6, y:naF.ny*U*0.6 };  // 中なら外へ
-        const upper = this.chordY(pt) < 0;
-        const na = this.nearest(pt, upper?"up":"lo");   // 上の点は上面だけ・下の点は下面だけを見る（前縁で上下に分かれる）
+        const dx=pt.x-this.center.x, dy=pt.y-this.center.y;
+        const ca=Math.cos(this.alpha), sa=Math.sin(this.alpha);
+        const wx=dx*ca+dy*sa, wy=-dx*sa+dy*ca;          // 翼座標（wx:下流, wy<0:上面）
+        const upper = wy < 0;
+        const na = this.nearest(pt, upper?"up":"lo");   // 上の点は上面だけ・下の点は下面だけ
         let vx=U, vy=0;
         const band=this.R*0.95;
+        // 前縁より前では 分岐を弱める → よどみ点が前縁の先端に来る（手前でカクッと割れない）
+        const aheadFade = clamp(1 + (wx + 0.5*ch)/(0.5*this.R), 0, 1);
         if (na.dist<band){
           const w0=1 - na.dist/band, w=w0*w0*(3-2*w0);   // smoothstep
           const sep=this.sepFactor(pt);
-          const follow=w*(1-sep);
+          const follow=w*(1-sep)*aheadFade;
           // 表面にそう接線（下流むき）
           let tx=-na.ny, ty=na.nx; if (tx<0){ tx=-tx; ty=-ty; }
+          // 後縁に近づくほど 接線を翼弦方向へ寄せる（上下が後縁で滑らかに合流＝クッタ条件風）
+          const teB=clamp((wx - 0.25*ch)/(0.3*ch), 0, 1);
+          tx = tx*(1-teB) + ca*teB; ty = ty*(1-teB) + sa*teB;
+          const tl=Math.hypot(tx,ty)||1; tx/=tl; ty/=tl;
           // 方向を 一様(1,0)→接線 へ ブレンド（＝表面に沿う）
-          let dx=(1-follow)+follow*tx, dy=follow*ty; const dl=Math.hypot(dx,dy)||1; dx/=dl; dy/=dl;
+          let ddx=(1-follow)+follow*tx, ddy=follow*ty; const dl=Math.hypot(ddx,ddy)||1; ddx/=dl; ddy/=dl;
           // 速さ：上面は加速（＝色が赤くなる・循環のかわり）、下面は少し減速
           const spd = upper ? U*(1 + (this.cl()+0.20)*1.9*follow)
                             : U*(1 - 0.12*follow);
-          vx=dx*spd; vy=dy*spd;
+          vx=ddx*spd; vy=ddy*spd;
         }
         vy += this.downwash(pt);   // 前で上がり・後ろで下へ（翼が空気を下へ押す）
-        // 翼面にめり込ませない：内向き成分を消して表面をなめる
-        if (naF.dist < this.R*0.5){
+        // なめらかな反発場（非貫通）：近いほど内向き成分を除去＝ゆるくカーブして先端で分かれる
+        if (naF.dist < this.R*0.8){
+          const wg=1 - clamp(naF.dist/(this.R*0.8), 0, 1), wsm=wg*wg*(3-2*wg);
           const vn = vx*naF.nx + vy*naF.ny;
-          if (vn < 0){ vx -= naF.nx*vn; vy -= naF.ny*vn; }
+          if (vn < 0){ vx -= naF.nx*vn*wsm; vy -= naF.ny*vn*wsm; }
         }
         return { x:vx, y:vy };
       },
@@ -572,7 +582,7 @@
         sPts=sPts.slice(0,cut);
         const ep=sPts[sPts.length-1], na=this.nearest(ep);           // 実際の翼面（よどみ点）にスナップ
         sPts.push({x: ep.x - na.nx*na.dist, y: ep.y - na.ny*na.dist, sp:0});
-        this.lines.push({ pts: smoothPts(sPts,1), k:this.lines.length*0.7, stag:true }); // よどみ線（明るく描く）
+        this.lines.push({ pts: smoothPts(sPts,3), k:this.lines.length*0.7, stag:true }); // よどみ線（明るく描く）
         // 翼面にぴったり添う線（前縁のすぐ上／下から出して、翼面をなめるように流す＝前縁で分かれる）
         const nSkim = Math.ceil(W/4);
         for (const skim of [2, 9, 16]){
