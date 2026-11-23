@@ -295,6 +295,14 @@
     function rgbToHex(rgb) {
       return "#" + rgb.map(v => v.toString(16).padStart(2, "0")).join("");
     }
+    // くろ は「色みのない暗さ」として別扱い（白＋黒＝灰色にするため）
+    function applyShade(rgb, k) {
+      const f = 1 - 0.94 * (k || 0);
+      return [Math.round(rgb[0] * f), Math.round(rgb[1] * f), Math.round(rgb[2] * f)];
+    }
+    function paintToRgb(ryb, k) {
+      return applyShade(rybToRgb(ryb[0], ryb[1], ryb[2]), k);
+    }
 
     // 絵の具の三原色（RYB）
     const PAINT_PRIMARIES = [
@@ -314,11 +322,11 @@
       { name: "むらさき", ryb: [1, 0, 1] },
       { name: "もも",     ryb: [0.3, 0, 0.03] },
       { name: "ちゃ",     ryb: [0.85, 0.8, 0.5] },
-      { name: "くろ",     ryb: [1, 1, 1] },
+      { name: "くろ",     ryb: [0, 0, 0], k: 1 },  // 色みなしの“暗さ”
       { name: "しろ",     ryb: [0, 0, 0] }
     ];
     // 表示用の hex を事前計算
-    [...PAINT_PRIMARIES, ...PAINTS].forEach(c => { c.hex = rgbToHex(rybToRgb(c.ryb[0], c.ryb[1], c.ryb[2])); });
+    [...PAINT_PRIMARIES, ...PAINTS].forEach(c => { c.hex = rgbToHex(paintToRgb(c.ryb, c.k)); });
 
     const MODES = {
       light: {
@@ -418,7 +426,8 @@
           x: parseFloat(d.style.left) * scale,
           y: parseFloat(d.style.top) * scale,
           r: (d.offsetWidth / 2) * scale,
-          ryb: d._ryb
+          ryb: d._ryb,
+          k: d._k || 0
         });
       });
 
@@ -427,14 +436,14 @@
       const paper = [250, 249, 244]; // 白い紙
       for (let py = 0; py < H; py++) {
         for (let px = 0; px < W; px++) {
-          let sr = 0, sy = 0, sb = 0, n = 0;
+          let sr = 0, sy = 0, sb = 0, sk = 0, n = 0;
           for (let i = 0; i < disks.length; i++) {
             const d = disks[i];
             const dx = px - d.x;
             if (dx < -d.r || dx > d.r) continue;   // 横のはみ出しは早めに除外
             const dy = py - d.y;
             if (dx * dx + dy * dy <= d.r * d.r) {
-              sr += d.ryb[0]; sy += d.ryb[1]; sb += d.ryb[2]; n++;
+              sr += d.ryb[0]; sy += d.ryb[1]; sb += d.ryb[2]; sk += d.k; n++;
             }
           }
           const idx = (py * W + px) * 4;
@@ -442,7 +451,7 @@
           if (n === 0) {
             rgb = paper;
           } else {
-            rgb = rybToRgb(sr / n, sy / n, sb / n);
+            rgb = paintToRgb([sr / n, sy / n, sb / n], sk / n);
           }
           data[idx] = rgb[0]; data[idx + 1] = rgb[1]; data[idx + 2] = rgb[2]; data[idx + 3] = 255;
         }
@@ -462,6 +471,7 @@
       disk.className = "disk " + mode.diskClass;
       disk.style.setProperty("--size", size + "px");
       disk._ryb = color.ryb || null;
+      disk._k = color.k || 0;
       if (mode.canvas) {
         // 絵の具モード：実際の色はキャンバスが描くので円は透明（枠だけ）
         disk.style.background = "transparent";
