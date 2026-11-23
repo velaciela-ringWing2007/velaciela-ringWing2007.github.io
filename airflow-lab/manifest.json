@@ -1,0 +1,18 @@
+{
+  "name": "くうきの ながれ",
+  "short_name": "くうき",
+  "description": "送風機で風船が浮く理由（ベルヌーイ）や飛行機の翼の揚力を、空気の流れを見ながら体験できる子供向けアプリ",
+  "start_url": "/airflow-lab/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#101521",
+  "theme_color": "#0b0e14",
+  "icons": [
+    {
+      "src": "../icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

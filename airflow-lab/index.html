@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0b0e14">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>くうきの ながれ</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="../icons/icon.svg">
+  <style>
+    :root { --ui-bg:#101521; --ui-panel:#1d2436; --ui-text:#eef2fa; --ui-sub:#9fa9c0; --accent:#ffd43b; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin:0; padding:0; height:100%;
+      font-family:"Hiragino Maru Gothic ProN","Yu Gothic UI","Segoe UI",system-ui,sans-serif;
+      background:var(--ui-bg); color:var(--ui-text); overscroll-behavior:none;
+      -webkit-user-select:none; user-select:none; }
+    body { display:flex; flex-direction:column; }
+    header { padding:10px 12px 4px; text-align:center; }
+    h1 { margin:0 0 8px; font-size:1.2rem; letter-spacing:.04em; }
+    .mode-tabs { display:flex; gap:8px; justify-content:center; max-width:520px; margin:0 auto; }
+    .mode-tab { flex:1; padding:10px 6px; border:2px solid transparent; border-radius:16px;
+      background:var(--ui-panel); color:var(--ui-sub); font-size:1rem; font-weight:700; cursor:pointer; line-height:1.3;
+      transition:transform .08s ease, border-color .15s ease, color .15s ease; }
+    .mode-tab .emoji { font-size:1.35rem; display:block; }
+    .mode-tab:active { transform:scale(.96); }
+    .mode-tab.active { color:var(--ui-text); border-color:var(--accent); background:#273049; }
+    .stage-wrap { flex:1; position:relative; margin:8px 10px; border-radius:18px; overflow:hidden;
+      box-shadow:0 0 0 2px rgba(255,255,255,.06); touch-action:none; }
+    #stage { position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+    .hint { position:absolute; left:50%; bottom:10px; transform:translateX(-50%); padding:7px 14px;
+      border-radius:999px; max-width:calc(100% - 20px); font-size:.82rem; font-weight:700; text-align:center;
+      background:rgba(0,0,0,.45); color:#fff; pointer-events:none; backdrop-filter:blur(2px); }
+    .toolbar { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; padding:8px 10px calc(4px + env(safe-area-inset-bottom)); }
+    .btn { border:none; border-radius:12px; padding:9px 16px; font-size:.9rem; font-weight:700;
+      background:var(--ui-panel); color:var(--ui-text); cursor:pointer; }
+    .btn:active { transform:scale(.96); }
+    .btn.on { background:var(--accent); color:#332a00; }
+    .tip { text-align:center; color:var(--ui-sub); font-size:.74rem; padding:0 12px 6px; line-height:1.5; }
+    a.home { color:var(--ui-sub); font-size:.78rem; text-decoration:none; }
+    a.home:active { color:var(--accent); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>💨 くうきの ながれ</h1>
+    <div class="mode-tabs">
+      <button class="mode-tab active" data-mode="blower"><span class="emoji">🎈</span>ふうせん</button>
+      <button class="mode-tab" data-mode="wing"><span class="emoji">✈️</span>つばさ</button>
+    </div>
+  </header>
+
+  <div class="stage-wrap">
+    <canvas id="stage"></canvas>
+    <div class="hint" id="hint"></div>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn" id="forceBtn">ちからを みる</button>
+    <button class="btn" id="resetBtn">さいしょから</button>
+  </div>
+  <p class="tip" id="tip"></p>
+  <p class="tip"><a class="home" href="../index.html">← ツール いちらんへ</a></p>
+
+  <script>
+  (function () {
+    "use strict";
+    const canvas = document.getElementById("stage");
+    const ctx = canvas.getContext("2d");
+    const hintEl = document.getElementById("hint");
+    const tipEl = document.getElementById("tip");
+    const forceBtn = document.getElementById("forceBtn");
+
+    let W = 0, H = 0, DPR = 1;
+    let currentMode = "blower";
+    let showForces = false;
+
+    // ---- ベクトル ----
+    const sub=(a,b)=>({x:a.x-b.x,y:a.y-b.y}), add=(a,b)=>({x:a.x+b.x,y:a.y+b.y});
+    const mul=(a,s)=>({x:a.x*s,y:a.y*s}), len=a=>Math.hypot(a.x,a.y);
+    const norm=a=>{const l=len(a)||1;return{x:a.x/l,y:a.y/l};};
+    const dot=(a,b)=>a.x*b.x+a.y*b.y, perp=a=>({x:-a.y,y:a.x});
+    const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+    const lerp=(a,b,t)=>a+(b-a)*t;
+    function speedColor(sp, smax){ // おそい=青, はやい=白っぽい水色
+      const t = clamp(sp/smax,0,1);
+      const r=Math.round(lerp(70,230,t)), g=Math.round(lerp(140,245,t)), b=Math.round(lerp(255,255,t));
+      return "rgb("+r+","+g+","+b+")";
+    }
+
+    // =====================================================================
+    // 🎈 送風機で風船（ジェット気流＋ベルヌーイで中心へ戻る）
+    // =====================================================================
+    const BL = {
+      // --- 物理定数（Nodeで調整済み）---
+      U0: 11, W0: 44, SPREAD: 0.13, CD: 0.0034, CC: 0.0075,
+      G: 0.10, M: 1, DAMP: 0.95, BALLR: 26, SUB: 3,
+      fan: null, jetAng: 0, ball: null, vel: {x:0,y:0}, floorY: 0, particles: [],
+      make() {
+        this.fan = { x: 0.5*W, y: 0.92*H };
+        this.floorY = 0.955*H;
+        this.jetAng = 0;
+        this.ball = { x: 0.5*W, y: 0.42*H };
+        this.vel = { x:0, y:0 };
+        this.particles = [];
+        for (let i=0;i<150;i++) this.particles.push(this.seed());
+      },
+      jvec() { return { x: Math.sin(this.jetAng), y: -Math.cos(this.jetAng) }; },
+      seed() {
+        const J = this.jvec(), K = perp(J);
+        const a = (Math.random()*2-1) * this.W0 * 0.9;
+        const p = add(this.fan, mul(K, a));
+        return { x:p.x, y:p.y, trail:[], life: Math.random()*40 };
+      },
+      speedAt(s, a) {
+        if (s < 0) return 0;
+        const hw = this.W0 + this.SPREAD*s;
+        const axis = this.U0 * this.W0 / (this.W0 + this.SPREAD*s);
+        return axis * Math.exp(-(a*a)/(hw*hw));
+      },
+      field(pt) {
+        const J = this.jvec(), K = perp(J);
+        const rel = sub(pt, this.fan);
+        const s = dot(rel, J), a = dot(rel, K);
+        const sp = this.speedAt(s, a);
+        const hw = this.W0 + this.SPREAD*s;
+        const outward = (hw>0 ? a/hw : 0) * 0.3;
+        const dir = norm(add(J, mul(K, outward)));
+        return { x: dir.x*sp, y: dir.y*sp, speed: sp };
+      },
+      forces(pos, vel) {
+        const J = this.jvec(), K = perp(J);
+        const air = this.field(pos);
+        const vrel = sub(air, vel);
+        const Fd = mul(vrel, this.CD*len(vrel));              // 空気の押し上げ（抗力）
+        const rel = sub(pos, this.fan);
+        const s = dot(rel, J), a = dot(rel, K);
+        const vP = this.speedAt(s, a + this.BALLR);
+        const vM = this.speedAt(s, a - this.BALLR);
+        const Fc = mul(K, this.CC*(vP*vP - vM*vM));           // ベルヌーイ：速い側へ（＝中心へ）
+        const Fg = { x:0, y:this.G*this.M };                  // 重力
+        return { total: add(add(Fd,Fc),Fg), Fd, Fc, Fg, air };
+      },
+      update(dragging) {
+        // 風船の運動
+        if (!dragging) {
+          const dt = 1/this.SUB;
+          for (let k=0;k<this.SUB;k++){
+            const f = this.forces(this.ball, this.vel);
+            this.vel = mul(add(this.vel, mul(f.total, dt/this.M)), Math.pow(this.DAMP, dt));
+            this.ball = add(this.ball, mul(this.vel, dt));
+          }
+          // 壁・床
+          this.ball.x = clamp(this.ball.x, this.BALLR, W-this.BALLR);
+          if (this.ball.y > this.floorY - this.BALLR) { this.ball.y = this.floorY-this.BALLR; if(this.vel.y>0) this.vel.y*=-0.25; this.vel.x*=0.7; }
+          if (this.ball.y < this.BALLR) { this.ball.y = this.BALLR; if(this.vel.y<0) this.vel.y=0; }
+        } else { this.vel = {x:0,y:0}; }
+        // 気流パーティクル
+        const P = this.particles;
+        for (let i=0;i<P.length;i++){
+          const pt = P[i];
+          let v = this.field(pt);
+          // 風船をよける
+          const dB = sub(pt, this.ball); const dist = len(dB);
+          if (dist < this.BALLR*1.6 && dist>0.1) {
+            const push = (this.BALLR*1.6 - dist)/ (this.BALLR*1.6);
+            v = add(v, mul(norm(dB), v.speed? len(v)*push*0.9 : 0));
+          }
+          pt.x += v.x*0.7; pt.y += v.y*0.7; pt.life++;
+          pt.trail.push({x:pt.x,y:pt.y}); if (pt.trail.length>7) pt.trail.shift();
+          if (pt.y < 0 || pt.x<0 || pt.x>W || pt.life>160 || (v.speed<0.05 && pt.life>20)) { P[i] = this.seed(); }
+        }
+      },
+      draw() {
+        // 背景
+        const g = ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,"#0d1324"); g.addColorStop(1,"#141b2e");
+        ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+        // 床
+        ctx.fillStyle="#232b40"; ctx.fillRect(0,this.floorY,W,H-this.floorY);
+        // 気流
+        ctx.lineCap="round";
+        for (const pt of this.particles){
+          if (pt.trail.length<2) continue;
+          const sp = len(this.field(pt));
+          ctx.strokeStyle = speedColor(sp, this.U0);
+          ctx.globalAlpha = 0.75; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(pt.trail[0].x, pt.trail[0].y);
+          for (let i=1;i<pt.trail.length;i++) ctx.lineTo(pt.trail[i].x, pt.trail[i].y);
+          ctx.stroke();
+        }
+        ctx.globalAlpha=1;
+        // 送風機
+        this.drawFan();
+        // 風船
+        const b = this.ball, r=this.BALLR;
+        const bg = ctx.createRadialGradient(b.x-r*0.3,b.y-r*0.35,r*0.2,b.x,b.y,r);
+        bg.addColorStop(0,"#ff9a76"); bg.addColorStop(1,"#e23b5a");
+        ctx.fillStyle=bg; ctx.beginPath(); ctx.arc(b.x,b.y,r,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle="rgba(255,255,255,.5)"; ctx.beginPath(); ctx.arc(b.x-r*0.32,b.y-r*0.36,r*0.22,0,Math.PI*2); ctx.fill();
+        // むすびめ
+        ctx.fillStyle="#e23b5a"; ctx.beginPath(); ctx.moveTo(b.x-4,b.y+r); ctx.lineTo(b.x+4,b.y+r); ctx.lineTo(b.x,b.y+r+7); ctx.fill();
+        // 力の矢印
+        if (showForces) this.drawForces();
+      },
+      drawFan() {
+        const J=this.jvec(), K=perp(J), f=this.fan;
+        const w=this.W0*1.15;
+        const a1=add(f,mul(K,-w)), a2=add(f,mul(K,w));
+        const back=add(f,mul(J,-26));
+        ctx.fillStyle="#48506b";
+        ctx.beginPath();
+        ctx.moveTo(a1.x,a1.y); ctx.lineTo(a2.x,a2.y);
+        ctx.lineTo(back.x+K.x*w*0.7,back.y+K.y*w*0.7);
+        ctx.lineTo(back.x-K.x*w*0.7,back.y-K.y*w*0.7);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle="#2e3550"; ctx.beginPath(); ctx.arc(f.x,f.y,10,0,Math.PI*2); ctx.fill();
+        // 傾きハンドル
+        const hp = add(f, mul(J, 54));
+        ctx.strokeStyle="rgba(255,255,255,.3)"; ctx.setLineDash([4,4]); ctx.lineWidth=1.5;
+        ctx.beginPath(); ctx.moveTo(f.x,f.y); ctx.lineTo(hp.x,hp.y); ctx.stroke(); ctx.setLineDash([]);
+        ctx.beginPath(); ctx.arc(hp.x,hp.y,9,0,Math.PI*2);
+        ctx.fillStyle="rgba(255,255,255,.14)"; ctx.fill(); ctx.strokeStyle="#9fe0ff"; ctx.lineWidth=2.5; ctx.stroke();
+      },
+      tiltHandlePos(){ return add(this.fan, mul(this.jvec(), 54)); },
+      drawForces() {
+        const f = this.forces(this.ball, {x:0,y:0});
+        const b = this.ball;
+        arrow(b, add(b, mul(f.Fg, 90)), "#ff5d5d", "じゅうりょく");
+        arrow(b, add(b, mul(f.Fd, 90)), "#6fe3ff", "くうきの ちから");
+        if (len(f.Fc) > 0.01) arrow(b, add(b, mul(f.Fc, 120)), "#ffe14d", "まんなかへ");
+      }
+    };
+
+    // =====================================================================
+    // ✈️ 翼の揚力（円柱＋循環のポテンシャル流で流線）
+    // =====================================================================
+    const WG = {
+      UINF: 2.4, R: 46, GFAC: 2.0, alpha: 0.18, center: null, particles: [],
+      make() {
+        this.center = { x: 0.46*W, y: 0.5*H };
+        this.alpha = 0.18;
+        this.particles = [];
+        for (let i=0;i<170;i++) this.particles.push(this.seed(true));
+      },
+      seed(anywhere) {
+        return { x: anywhere? Math.random()*W*0.4 : -4, y: Math.random()*H, trail:[], life: Math.random()*60 };
+      },
+      gamma(){ return this.GFAC * this.UINF * this.R * Math.sin(this.alpha); },
+      field(pt) {
+        const d = sub(pt, this.center);
+        const ca=Math.cos(-this.alpha), sa=Math.sin(-this.alpha);
+        const x = d.x*ca - d.y*sa, y = d.x*sa + d.y*ca;   // 翼フレーム（一様流は +x）
+        const r = Math.hypot(x,y), rr = Math.max(r, this.R);
+        const th = Math.atan2(y, x), U = this.UINF;
+        const vr = U*(1 - this.R*this.R/(rr*rr))*Math.cos(th);
+        const vt = -U*(1 + this.R*this.R/(rr*rr))*Math.sin(th) + this.gamma()/(2*Math.PI*rr);
+        let vx = vr*Math.cos(th) - vt*Math.sin(th);
+        let vy = vr*Math.sin(th) + vt*Math.cos(th);
+        const cb=Math.cos(this.alpha), sb=Math.sin(this.alpha);
+        return { x: vx*cb - vy*sb, y: vx*sb + vy*cb, inside: r < this.R*0.98 };
+      },
+      update() {
+        const P=this.particles;
+        for (let i=0;i<P.length;i++){
+          const pt=P[i];
+          let steps=2;
+          for (let k=0;k<steps;k++){
+            const v=this.field(pt);
+            pt.x += v.x*1.1; pt.y += v.y*1.1;
+          }
+          pt.life++;
+          pt.trail.push({x:pt.x,y:pt.y}); if (pt.trail.length>8) pt.trail.shift();
+          if (pt.x>W+4 || pt.y<-20 || pt.y>H+20 || pt.life>400) P[i]=this.seed(false);
+        }
+      },
+      draw() {
+        const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,"#0c1426"); g.addColorStop(1,"#0f1a30");
+        ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+        // 流線
+        ctx.lineCap="round";
+        const smax=this.UINF*2.2;
+        for (const pt of this.particles){
+          if (pt.trail.length<2) continue;
+          const sp=len(this.field(pt));
+          ctx.strokeStyle=speedColor(sp, smax); ctx.globalAlpha=0.8; ctx.lineWidth=2;
+          ctx.beginPath(); ctx.moveTo(pt.trail[0].x,pt.trail[0].y);
+          for (let i=1;i<pt.trail.length;i++) ctx.lineTo(pt.trail[i].x,pt.trail[i].y);
+          ctx.stroke();
+        }
+        ctx.globalAlpha=1;
+        // 翼（楕円を迎え角ぶん回転）
+        const c=this.center;
+        ctx.save(); ctx.translate(c.x,c.y); ctx.rotate(-this.alpha);
+        ctx.fillStyle="#e9edf6";
+        ctx.beginPath(); ctx.ellipse(0,0,this.R*0.95,this.R*0.42,0,0,Math.PI*2); ctx.fill();
+        ctx.restore();
+        // AoAハンドル（前ふち）
+        const hp=this.aoaHandlePos();
+        ctx.beginPath(); ctx.arc(hp.x,hp.y,9,0,Math.PI*2);
+        ctx.fillStyle="rgba(255,255,255,.14)"; ctx.fill(); ctx.strokeStyle="#ffd43b"; ctx.lineWidth=2.5; ctx.stroke();
+        // 揚力の矢印
+        const lift = this.gamma();
+        const deg = Math.abs(this.alpha*180/Math.PI);
+        if (showForces || true) {
+          const Lp = Math.min(150, Math.abs(lift)*8);
+          if (Lp>4) arrow(c, {x:c.x, y:c.y - Lp}, "#7dff9b", "ようりょく");
+          // 迎え角ラベル
+          ctx.fillStyle="rgba(255,255,255,.75)"; ctx.font="bold 13px sans-serif"; ctx.textAlign="left";
+          ctx.fillText("むきの かくど: "+deg.toFixed(0)+"°", 12, 22);
+        }
+        if (deg > 18) {
+          ctx.fillStyle="#ff6b6b"; ctx.font="bold 15px sans-serif"; ctx.textAlign="center";
+          ctx.fillText("⚠ しっそく（あげすぎ）", W/2, 40);
+        }
+      },
+      aoaHandlePos(){
+        const c=this.center, ca=Math.cos(-this.alpha), sa=Math.sin(-this.alpha);
+        const lx=-this.R*1.15, ly=0;   // 前ふち
+        return { x: c.x + (lx*ca - ly*sa), y: c.y + (lx*sa + ly*ca) };
+      }
+    };
+
+    // ---- 共通：矢印 ----
+    function arrow(from, to, color, label) {
+      const d=sub(to,from), l=len(d); if (l<2) return;
+      const u=norm(d);
+      ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=3; ctx.lineCap="round";
+      ctx.beginPath(); ctx.moveTo(from.x,from.y); ctx.lineTo(to.x,to.y); ctx.stroke();
+      const n=perp(u);
+      ctx.beginPath(); ctx.moveTo(to.x,to.y);
+      ctx.lineTo(to.x-u.x*12+n.x*7, to.y-u.y*12+n.y*7);
+      ctx.lineTo(to.x-u.x*12-n.x*7, to.y-u.y*12-n.y*7);
+      ctx.closePath(); ctx.fill();
+      if (label){ ctx.font="bold 12px sans-serif"; ctx.textAlign="center";
+        ctx.fillText(label, to.x+u.x*2, to.y - (u.y<0? 10 : -16)); }
+    }
+
+    const MODES = {
+      blower: { ref: BL, hint:"🎈 ふうせんを ジェットの かぜに もっていくと うくよ。よこに ずれても まんなかに もどる！",
+        tip:"ふうせんを ドラッグ。白い◯で ジェットの むきを かえられるよ。「ちからを みる」で なぜ うくか わかる。" },
+      wing:   { ref: WG, hint:"✈️ つばさの 上は かぜが はやい＝おされる ちからが よわい → 上へ もちあがる（ようりょく）",
+        tip:"黄色い◯を 上下に ドラッグ して つばさの むきを かえよう。あげすぎると しっそく するよ。" }
+    };
+
+    // ---- 描画ループ ----
+    let running = true;
+    function frame() {
+      if (!running) return;
+      const sc = MODES[currentMode].ref;
+      if (currentMode==="blower") { sc.update(dragTarget==="ball"); }
+      else { sc.update(); }
+      // ドラッグ反映
+      if (dragTarget) applyDrag();
+      sc.draw();
+      requestAnimationFrame(frame);
+    }
+
+    // ---- リサイズ ----
+    function fitCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      W=rect.width; H=rect.height; DPR=Math.min(2, window.devicePixelRatio||1);
+      canvas.width=Math.round(W*DPR); canvas.height=Math.round(H*DPR);
+      ctx.setTransform(DPR,0,0,DPR,0,0);
+      BL.make(); WG.make();
+    }
+
+    // ---- 入力 ----
+    let dragTarget = null, lastPointer = null;
+    function pointerPos(e){ const r=canvas.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; }
+    function near(p,q,rad){ return Math.hypot(p.x-q.x,p.y-q.y) < rad; }
+    canvas.addEventListener("pointerdown",(e)=>{
+      e.preventDefault(); const m=pointerPos(e); lastPointer=m;
+      if (currentMode==="blower") {
+        if (near(m, BL.ball, BL.BALLR+10)) dragTarget="ball";
+        else if (near(m, BL.tiltHandlePos(), 22)) dragTarget="tilt";
+      } else {
+        if (near(m, WG.aoaHandlePos(), 24)) dragTarget="aoa";
+      }
+      if (dragTarget) canvas.setPointerCapture(e.pointerId);
+    });
+    canvas.addEventListener("pointermove",(e)=>{ if(!dragTarget) return; lastPointer=pointerPos(e); });
+    function applyDrag(){
+      const m=lastPointer; if(!m) return;
+      if (dragTarget==="ball"){ BL.ball={x:clamp(m.x,BL.BALLR,W-BL.BALLR),y:clamp(m.y,BL.BALLR,H-BL.BALLR)}; BL.vel={x:0,y:0}; }
+      else if (dragTarget==="tilt"){ const d=sub(m,BL.fan); BL.jetAng=clamp(Math.atan2(d.x,-d.y), -0.6, 0.6); }
+      else if (dragTarget==="aoa"){ const d=sub(m,WG.center); WG.alpha=clamp(-Math.atan2(d.y,-d.x), -0.52, 0.52); }
+    }
+    function endDrag(e){ dragTarget=null; try{canvas.releasePointerCapture(e.pointerId);}catch(_){} }
+    canvas.addEventListener("pointerup",endDrag);
+    canvas.addEventListener("pointercancel",endDrag);
+
+    // ---- モード切替 ----
+    function applyMode() {
+      const sc = MODES[currentMode];
+      hintEl.textContent = sc.hint; tipEl.textContent = sc.tip;
+      forceBtn.style.display = currentMode==="blower" ? "" : "none";
+      document.querySelectorAll(".mode-tab").forEach(t=>t.classList.toggle("active", t.dataset.mode===currentMode));
+    }
+    document.querySelectorAll(".mode-tab").forEach(tab=>{
+      tab.addEventListener("click",()=>{ if(currentMode===tab.dataset.mode) return; currentMode=tab.dataset.mode; applyMode(); });
+    });
+    forceBtn.addEventListener("click",()=>{ showForces=!showForces; forceBtn.classList.toggle("on",showForces); });
+    document.getElementById("resetBtn").addEventListener("click",()=>{ MODES[currentMode].ref.make(); });
+
+    document.addEventListener("visibilitychange",()=>{ running=!document.hidden; if(running) frame(); });
+    window.addEventListener("resize", fitCanvas);
+    window.addEventListener("load",()=>{ fitCanvas(); applyMode(); });
+
+    fitCanvas(); applyMode(); frame();
+  })();
+
+  if ("serviceWorker" in navigator) { navigator.serviceWorker.register("/service-worker.js").catch(()=>{}); }
+  </script>
+</body>
+</html>
