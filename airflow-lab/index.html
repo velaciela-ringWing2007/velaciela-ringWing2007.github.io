@@ -89,15 +89,25 @@
       const r=Math.round(lerp(70,230,t)), g=Math.round(lerp(140,245,t)), b=Math.round(lerp(255,255,t));
       return "rgb("+r+","+g+","+b+")";
     }
+    // 渦（うず）による速度。vortices: [{x,y,G,core}]
+    function vortexVel(pt, vortices){
+      let vx=0, vy=0;
+      for (let i=0;i<vortices.length;i++){
+        const v=vortices[i]; const dx=pt.x-v.x, dy=pt.y-v.y;
+        const r2=dx*dx+dy*dy+v.core; const f=v.G/r2;
+        vx += -dy*f; vy += dx*f;
+      }
+      return { x:vx, y:vy };
+    }
 
     // =====================================================================
     // 🎈 送風機で風船（ジェット気流＋ベルヌーイで中心へ戻る）
     // =====================================================================
     const BL = {
       // --- 物理定数（Nodeで調整済み）---
-      U0: 11, W0: 44, SPREAD: 0.13, CD: 0.0034, CC: 0.0075,
-      G: 0.10, M: 1, DAMP: 0.95, BALLR: 26, SUB: 3,
-      fan: null, jetAng: 0, ball: null, vel: {x:0,y:0}, floorY: 0, particles: [],
+      U0: 11, W0: 48, SPREAD: 0.13, CD: 0.0034, CC: 0.0075,
+      G: 0.10, M: 1, DAMP: 0.95, BALLR: 34, SUB: 3,
+      fan: null, jetAng: 0, ball: null, vel: {x:0,y:0}, floorY: 0, particles: [], vortices: [],
       make() {
         this.fan = { x: 0.5*W, y: 0.92*H };
         this.floorY = 0.955*H;
@@ -105,14 +115,15 @@
         this.ball = { x: 0.5*W, y: 0.42*H };
         this.vel = { x:0, y:0 };
         this.particles = [];
-        for (let i=0;i<150;i++) this.particles.push(this.seed());
+        for (let i=0;i<280;i++) this.particles.push(this.seed());
+        this.updateVortices();
       },
       jvec() { return { x: Math.sin(this.jetAng), y: -Math.cos(this.jetAng) }; },
       seed() {
         const J = this.jvec(), K = perp(J);
-        const a = (Math.random()*2-1) * this.W0 * 0.9;
+        const a = (Math.random()*2-1) * this.W0 * 1.0;
         const p = add(this.fan, mul(K, a));
-        return { x:p.x, y:p.y, trail:[], life: Math.random()*40 };
+        return { x:p.x, y:p.y, trail:[], life: Math.random()*50 };
       },
       speedAt(s, a) {
         if (s < 0) return 0;
@@ -120,7 +131,7 @@
         const axis = this.U0 * this.W0 / (this.W0 + this.SPREAD*s);
         return axis * Math.exp(-(a*a)/(hw*hw));
       },
-      field(pt) {
+      field(pt) {   // 純ジェット（風船の運動計算用）
         const J = this.jvec(), K = perp(J);
         const rel = sub(pt, this.fan);
         const s = dot(rel, J), a = dot(rel, K);
@@ -129,6 +140,30 @@
         const outward = (hw>0 ? a/hw : 0) * 0.3;
         const dir = norm(add(J, mul(K, outward)));
         return { x: dir.x*sp, y: dir.y*sp, speed: sp };
+      },
+      updateVortices() {   // 物体の上に左右2つ（巻き込み＝ウェイク）
+        const b=this.ball, r=this.BALLR, J=this.jvec(), K=perp(J);
+        const up = mul(J, r*1.3), side = mul(K, r*0.95);
+        const Gv = this.U0 * r * 0.95;
+        const core = (r*0.8)*(r*0.8);
+        this.vortices = [
+          { x: b.x + up.x - side.x, y: b.y + up.y - side.y, G: +Gv, core },
+          { x: b.x + up.x + side.x, y: b.y + up.y + side.y, G: -Gv, core }
+        ];
+      },
+      visFlow(pt) {   // 見た目の流れ：ジェット＋渦＋物体まわりの回り込み
+        const j = this.field(pt);
+        const vo = vortexVel(pt, this.vortices);
+        let v = { x: j.x+vo.x, y: j.y+vo.y };
+        const d = sub(pt, this.ball), dist = len(d);
+        const infl = this.BALLR*2.0;
+        if (dist < infl && dist > 0.5) {
+          const n = mul(d, 1/dist);
+          const vn = dot(v, n);
+          if (vn < 0) v = sub(v, mul(n, vn));      // 中へ入らず回り込む
+          v = mul(v, 1 + 0.35*(1 - dist/infl));    // 横で加速
+        }
+        return v;
       },
       forces(pos, vel) {
         const J = this.jvec(), K = perp(J);
@@ -144,7 +179,6 @@
         return { total: add(add(Fd,Fc),Fg), Fd, Fc, Fg, air };
       },
       update(dragging) {
-        // 風船の運動
         if (!dragging) {
           const dt = 1/this.SUB;
           for (let k=0;k<this.SUB;k++){
@@ -152,57 +186,69 @@
             this.vel = mul(add(this.vel, mul(f.total, dt/this.M)), Math.pow(this.DAMP, dt));
             this.ball = add(this.ball, mul(this.vel, dt));
           }
-          // 壁・床
           this.ball.x = clamp(this.ball.x, this.BALLR, W-this.BALLR);
           if (this.ball.y > this.floorY - this.BALLR) { this.ball.y = this.floorY-this.BALLR; if(this.vel.y>0) this.vel.y*=-0.25; this.vel.x*=0.7; }
           if (this.ball.y < this.BALLR) { this.ball.y = this.BALLR; if(this.vel.y<0) this.vel.y=0; }
         } else { this.vel = {x:0,y:0}; }
-        // 気流パーティクル
+        this.updateVortices();
         const P = this.particles;
         for (let i=0;i<P.length;i++){
           const pt = P[i];
-          let v = this.field(pt);
-          // 風船をよける
-          const dB = sub(pt, this.ball); const dist = len(dB);
-          if (dist < this.BALLR*1.6 && dist>0.1) {
-            const push = (this.BALLR*1.6 - dist)/ (this.BALLR*1.6);
-            v = add(v, mul(norm(dB), v.speed? len(v)*push*0.9 : 0));
-          }
+          const v = this.visFlow(pt);
+          const d = sub(pt, this.ball), dist = len(d);
+          if (dist < this.BALLR*1.02 && dist>0.1) { const n=mul(d,1/dist); pt.x=this.ball.x+n.x*this.BALLR*1.02; pt.y=this.ball.y+n.y*this.BALLR*1.02; }
           pt.x += v.x*0.7; pt.y += v.y*0.7; pt.life++;
-          pt.trail.push({x:pt.x,y:pt.y}); if (pt.trail.length>7) pt.trail.shift();
-          if (pt.y < 0 || pt.x<0 || pt.x>W || pt.life>160 || (v.speed<0.05 && pt.life>20)) { P[i] = this.seed(); }
+          pt.trail.push({x:pt.x,y:pt.y}); if (pt.trail.length>8) pt.trail.shift();
+          const sp = len(v);
+          if (pt.y < -6 || pt.x<-6 || pt.x>W+6 || pt.life>210 || (sp<0.05 && pt.life>24)) { P[i] = this.seed(); }
         }
       },
       draw() {
-        // 背景
         const g = ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,"#0d1324"); g.addColorStop(1,"#141b2e");
         ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
-        // 床
         ctx.fillStyle="#232b40"; ctx.fillRect(0,this.floorY,W,H-this.floorY);
-        // 気流
         ctx.lineCap="round";
         for (const pt of this.particles){
           if (pt.trail.length<2) continue;
-          const sp = len(this.field(pt));
-          ctx.strokeStyle = speedColor(sp, this.U0);
-          ctx.globalAlpha = 0.75; ctx.lineWidth = 2;
+          const sp = len(this.visFlow(pt));
+          ctx.strokeStyle = speedColor(sp, this.U0*1.2);
+          ctx.globalAlpha = 0.7; ctx.lineWidth = 1.8;
           ctx.beginPath(); ctx.moveTo(pt.trail[0].x, pt.trail[0].y);
           for (let i=1;i<pt.trail.length;i++) ctx.lineTo(pt.trail[i].x, pt.trail[i].y);
           ctx.stroke();
         }
         ctx.globalAlpha=1;
-        // 送風機
         this.drawFan();
-        // 風船
+        this.drawPressure();   // 全方位の 正圧(+)／負圧(−)
+        // 物体
         const b = this.ball, r=this.BALLR;
         const bg = ctx.createRadialGradient(b.x-r*0.3,b.y-r*0.35,r*0.2,b.x,b.y,r);
         bg.addColorStop(0,"#ff9a76"); bg.addColorStop(1,"#e23b5a");
         ctx.fillStyle=bg; ctx.beginPath(); ctx.arc(b.x,b.y,r,0,Math.PI*2); ctx.fill();
         ctx.fillStyle="rgba(255,255,255,.5)"; ctx.beginPath(); ctx.arc(b.x-r*0.32,b.y-r*0.36,r*0.22,0,Math.PI*2); ctx.fill();
-        // むすびめ
-        ctx.fillStyle="#e23b5a"; ctx.beginPath(); ctx.moveTo(b.x-4,b.y+r); ctx.lineTo(b.x+4,b.y+r); ctx.lineTo(b.x,b.y+r+7); ctx.fill();
-        // 力の矢印
         if (showForces) this.drawForces();
+      },
+      drawPressure() {   // 物体まわりの圧力（円柱近似×その場のジェット強さ）
+        const b=this.ball, r=this.BALLR, J=this.jvec();
+        const incFrom = mul(J,-1);   // 流れが当たる向き＝よどみ点（下）
+        const N=22;
+        for (let i=0;i<N;i++){
+          const ang = (i/N)*Math.PI*2;
+          const nrm = { x:Math.cos(ang), y:Math.sin(ang) };
+          const theta = Math.acos(clamp(dot(nrm, incFrom),-1,1));
+          const surf = add(b, mul(nrm, r+8));
+          const localU = len(this.field(surf));
+          let cp = (theta < 2.094) ? (1 - 4*Math.sin(theta)*Math.sin(theta)) : -0.5;
+          cp *= clamp(localU/(this.U0*0.5), 0.12, 1.5);
+          const mag = clamp(Math.abs(cp)*12, 3, 26);
+          const pos = cp >= 0;          // +圧=押す(赤・内向き) / −圧=吸う(青・外向き)
+          const dir = pos ? -1 : 1;
+          const base = add(b, mul(nrm, r+4));
+          const tip = add(base, mul(nrm, dir*mag));
+          ctx.strokeStyle = pos ? "rgba(255,110,90,.95)" : "rgba(110,185,255,.95)";
+          ctx.lineWidth = 2.6; ctx.lineCap="round";
+          ctx.beginPath(); ctx.moveTo(base.x,base.y); ctx.lineTo(tip.x,tip.y); ctx.stroke();
+        }
       },
       drawFan() {
         const J=this.jvec(), K=perp(J), f=this.fan;
@@ -216,7 +262,6 @@
         ctx.lineTo(back.x-K.x*w*0.7,back.y-K.y*w*0.7);
         ctx.closePath(); ctx.fill();
         ctx.fillStyle="#2e3550"; ctx.beginPath(); ctx.arc(f.x,f.y,10,0,Math.PI*2); ctx.fill();
-        // 傾きハンドル
         const hp = add(f, mul(J, 54));
         ctx.strokeStyle="rgba(255,255,255,.3)"; ctx.setLineDash([4,4]); ctx.lineWidth=1.5;
         ctx.beginPath(); ctx.moveTo(f.x,f.y); ctx.lineTo(hp.x,hp.y); ctx.stroke(); ctx.setLineDash([]);
@@ -228,7 +273,7 @@
         const f = this.forces(this.ball, {x:0,y:0});
         const b = this.ball;
         arrow(b, add(b, mul(f.Fg, 90)), "#ff5d5d", "じゅうりょく");
-        arrow(b, add(b, mul(f.Fd, 90)), "#6fe3ff", "くうきの ちから");
+        arrow(b, add(b, mul(f.Fd, 90)), "#6fe3ff", "おしあげ");
         if (len(f.Fc) > 0.01) arrow(b, add(b, mul(f.Fc, 120)), "#ffe14d", "まんなかへ");
       }
     };
@@ -237,89 +282,95 @@
     // ✈️ 翼の揚力（円柱＋循環のポテンシャル流で流線）
     // =====================================================================
     const WG = {
-      UINF: 2.4, R: 46, GFAC: 2.0, alpha: 0.18, center: null, particles: [],
+      UINF: 2.4, R: 62, GFAC: 2.2, alpha: 0.18, center: null, particles: [], wake: [], spawnT: 0, _s: 1,
       make() {
-        this.center = { x: 0.46*W, y: 0.5*H };
+        this.center = { x: 0.44*W, y: 0.5*H };
         this.alpha = 0.18;
         this.particles = [];
-        for (let i=0;i<170;i++) this.particles.push(this.seed(true));
+        for (let i=0;i<280;i++) this.particles.push(this.seed(true));
+        this.wake = []; this.spawnT = 0; this._s = 1;
       },
       seed(anywhere) {
-        return { x: anywhere? Math.random()*W*0.4 : -4, y: Math.random()*H, trail:[], life: Math.random()*60 };
+        return { x: anywhere? Math.random()*W : -4, y: Math.random()*H, trail:[], life: Math.random()*90 };
       },
       gamma(){ return this.GFAC * this.UINF * this.R * Math.sin(this.alpha); },
       field(pt) {
+        // 一様流は つねに 水平(+x)。翼まわりは 円柱＋循環。うしろの渦も加算。
         const d = sub(pt, this.center);
-        const ca=Math.cos(-this.alpha), sa=Math.sin(-this.alpha);
-        const x = d.x*ca - d.y*sa, y = d.x*sa + d.y*ca;   // 翼フレーム（一様流は +x）
-        const r = Math.hypot(x,y), rr = Math.max(r, this.R);
-        const th = Math.atan2(y, x), U = this.UINF;
+        const r = Math.hypot(d.x,d.y), rr = Math.max(r, this.R);
+        const th = Math.atan2(d.y, d.x), U = this.UINF;
         const vr = U*(1 - this.R*this.R/(rr*rr))*Math.cos(th);
         const vt = -U*(1 + this.R*this.R/(rr*rr))*Math.sin(th) + this.gamma()/(2*Math.PI*rr);
-        let vx = vr*Math.cos(th) - vt*Math.sin(th);
-        let vy = vr*Math.sin(th) + vt*Math.cos(th);
-        const cb=Math.cos(this.alpha), sb=Math.sin(this.alpha);
-        return { x: vx*cb - vy*sb, y: vx*sb + vy*cb, inside: r < this.R*0.98 };
+        const vx = vr*Math.cos(th) - vt*Math.sin(th);
+        const vy = vr*Math.sin(th) + vt*Math.cos(th);
+        const vo = vortexVel(pt, this.wake);
+        return { x: vx+vo.x, y: vy+vo.y };
       },
+      trailing(){ return { x:this.center.x + this.R*0.95*Math.cos(this.alpha), y:this.center.y + this.R*0.95*Math.sin(this.alpha) }; },
       update() {
+        const deg = Math.abs(this.alpha*180/Math.PI);
+        // うしろの渦を放出（角度が大きいほど 強く・はやく → 失速で乱れる）
+        this.spawnT--;
+        if (this.spawnT <= 0) {
+          this.spawnT = Math.max(7, 26 - deg*0.9);
+          const te = this.trailing();
+          this._s = -this._s;
+          const strength = this.UINF*this.R*(0.22 + deg*0.05);
+          this.wake.push({ x: te.x+6, y: te.y + this._s*this.R*0.33, G: this._s*strength, core: (this.R*0.55)*(this.R*0.55) });
+          if (this.wake.length > 44) this.wake.shift();
+        }
+        for (let i=this.wake.length-1;i>=0;i--){
+          const w=this.wake[i]; w.x += this.UINF*0.9; w.G *= 0.985;
+          if (w.x > W+50 || Math.abs(w.G) < 0.3) this.wake.splice(i,1);
+        }
         const P=this.particles;
         for (let i=0;i<P.length;i++){
           const pt=P[i];
-          let steps=2;
-          for (let k=0;k<steps;k++){
-            const v=this.field(pt);
-            pt.x += v.x*1.1; pt.y += v.y*1.1;
-          }
+          for (let k=0;k<2;k++){ const v=this.field(pt); pt.x += v.x*1.1; pt.y += v.y*1.1; }
+          const d=sub(pt,this.center), r=Math.hypot(d.x,d.y);
+          if (r < this.R){ const n=mul(d,1/(r||1)); pt.x=this.center.x+n.x*this.R; pt.y=this.center.y+n.y*this.R; }
           pt.life++;
           pt.trail.push({x:pt.x,y:pt.y}); if (pt.trail.length>8) pt.trail.shift();
-          if (pt.x>W+4 || pt.y<-20 || pt.y>H+20 || pt.life>400) P[i]=this.seed(false);
+          if (pt.x>W+4 || pt.y<-30 || pt.y>H+30 || pt.life>520) P[i]=this.seed(false);
         }
       },
       draw() {
         const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,"#0c1426"); g.addColorStop(1,"#0f1a30");
         ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
-        // 流線
         ctx.lineCap="round";
-        const smax=this.UINF*2.2;
+        const smax=this.UINF*2.4;
         for (const pt of this.particles){
           if (pt.trail.length<2) continue;
           const sp=len(this.field(pt));
-          ctx.strokeStyle=speedColor(sp, smax); ctx.globalAlpha=0.8; ctx.lineWidth=2;
+          ctx.strokeStyle=speedColor(sp, smax); ctx.globalAlpha=0.8; ctx.lineWidth=1.8;
           ctx.beginPath(); ctx.moveTo(pt.trail[0].x,pt.trail[0].y);
           for (let i=1;i<pt.trail.length;i++) ctx.lineTo(pt.trail[i].x,pt.trail[i].y);
           ctx.stroke();
         }
         ctx.globalAlpha=1;
-        // 翼（楕円を迎え角ぶん回転）
+        // 翼（楕円を迎え角ぶん回転：前ふちが上＝ノーズアップ）
         const c=this.center;
-        ctx.save(); ctx.translate(c.x,c.y); ctx.rotate(-this.alpha);
+        ctx.save(); ctx.translate(c.x,c.y); ctx.rotate(this.alpha);
         ctx.fillStyle="#e9edf6";
-        ctx.beginPath(); ctx.ellipse(0,0,this.R*0.95,this.R*0.42,0,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(0,0,this.R*0.95,this.R*0.4,0,0,Math.PI*2); ctx.fill();
         ctx.restore();
         // AoAハンドル（前ふち）
         const hp=this.aoaHandlePos();
-        ctx.beginPath(); ctx.arc(hp.x,hp.y,9,0,Math.PI*2);
+        ctx.beginPath(); ctx.arc(hp.x,hp.y,10,0,Math.PI*2);
         ctx.fillStyle="rgba(255,255,255,.14)"; ctx.fill(); ctx.strokeStyle="#ffd43b"; ctx.lineWidth=2.5; ctx.stroke();
-        // 揚力の矢印
-        const lift = this.gamma();
         const deg = Math.abs(this.alpha*180/Math.PI);
-        if (showForces || true) {
-          const Lp = Math.min(150, Math.abs(lift)*8);
+        ctx.fillStyle="rgba(255,255,255,.75)"; ctx.font="bold 13px sans-serif"; ctx.textAlign="left";
+        ctx.fillText("つばさの かくど: "+deg.toFixed(0)+"°", 12, 22);
+        if (showForces) {
+          const Lp = Math.min(130, Math.abs(this.gamma())*0.5);
           if (Lp>4) arrow(c, {x:c.x, y:c.y - Lp}, "#7dff9b", "ようりょく");
-          // 迎え角ラベル
-          ctx.fillStyle="rgba(255,255,255,.75)"; ctx.font="bold 13px sans-serif"; ctx.textAlign="left";
-          ctx.fillText("むきの かくど: "+deg.toFixed(0)+"°", 12, 22);
         }
-        if (deg > 18) {
-          ctx.fillStyle="#ff6b6b"; ctx.font="bold 15px sans-serif"; ctx.textAlign="center";
-          ctx.fillText("⚠ しっそく（あげすぎ）", W/2, 40);
+        if (deg > 16) {
+          ctx.fillStyle="#ff8a5c"; ctx.font="bold 15px sans-serif"; ctx.textAlign="center";
+          ctx.fillText("うずが おおきい（しっそく ぎみ）", W/2, 42);
         }
       },
-      aoaHandlePos(){
-        const c=this.center, ca=Math.cos(-this.alpha), sa=Math.sin(-this.alpha);
-        const lx=-this.R*1.15, ly=0;   // 前ふち
-        return { x: c.x + (lx*ca - ly*sa), y: c.y + (lx*sa + ly*ca) };
-      }
+      aoaHandlePos(){ return { x: this.center.x - this.R*1.15*Math.cos(this.alpha), y: this.center.y - this.R*1.15*Math.sin(this.alpha) }; }
     };
 
     // ---- 共通：矢印 ----
@@ -338,10 +389,10 @@
     }
 
     const MODES = {
-      blower: { ref: BL, hint:"🎈 ふうせんを ジェットの かぜに もっていくと うくよ。よこに ずれても まんなかに もどる！",
-        tip:"ふうせんを ドラッグ。白い◯で ジェットの むきを かえられるよ。「ちからを みる」で なぜ うくか わかる。" },
-      wing:   { ref: WG, hint:"✈️ つばさの 上は かぜが はやい＝おされる ちからが よわい → 上へ もちあがる（ようりょく）",
-        tip:"黄色い◯を 上下に ドラッグ して つばさの むきを かえよう。あげすぎると しっそく するよ。" }
+      blower: { ref: BL, hint:"🎈 まわりの かぜが 物の 上で うずを まき、全方位の 圧力（赤=おす／青=すう）で 位置が きまる",
+        tip:"物を ドラッグ。白い◯で ジェットの むきを かえられる。赤=正圧（おす）・青=負圧（すう）。「ちからを みる」で 合計の力。" },
+      wing:   { ref: WG, hint:"✈️ かぜは 水平に ながれる。つばさの 上は はやく、うしろには うずが できる",
+        tip:"黄色い◯を 上下に ドラッグ して つばさの むきを かえよう。角度を あげると うしろの うずが 大きくなる。" }
     };
 
     // ---- 描画ループ ----
@@ -385,7 +436,7 @@
       const m=lastPointer; if(!m) return;
       if (dragTarget==="ball"){ BL.ball={x:clamp(m.x,BL.BALLR,W-BL.BALLR),y:clamp(m.y,BL.BALLR,H-BL.BALLR)}; BL.vel={x:0,y:0}; }
       else if (dragTarget==="tilt"){ const d=sub(m,BL.fan); BL.jetAng=clamp(Math.atan2(d.x,-d.y), -0.6, 0.6); }
-      else if (dragTarget==="aoa"){ const d=sub(m,WG.center); WG.alpha=clamp(-Math.atan2(d.y,-d.x), -0.52, 0.52); }
+      else if (dragTarget==="aoa"){ WG.alpha = clamp(Math.atan2(WG.center.y - m.y, WG.center.x - m.x), -0.52, 0.52); }
     }
     function endDrag(e){ dragTarget=null; try{canvas.releasePointerCapture(e.pointerId);}catch(_){} }
     canvas.addEventListener("pointerup",endDrag);
@@ -395,7 +446,6 @@
     function applyMode() {
       const sc = MODES[currentMode];
       hintEl.textContent = sc.hint; tipEl.textContent = sc.tip;
-      forceBtn.style.display = currentMode==="blower" ? "" : "none";
       document.querySelectorAll(".mode-tab").forEach(t=>t.classList.toggle("active", t.dataset.mode===currentMode));
     }
     document.querySelectorAll(".mode-tab").forEach(tab=>{
