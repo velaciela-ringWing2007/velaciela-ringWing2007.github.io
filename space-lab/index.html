@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#05060d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>たいようけい 3D</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="../icons/icon.svg">
+  <style>
+    :root { --ui-bg:#05060d; --ui-panel:#161c2d; --ui-text:#eef2fa; --ui-sub:#9fa9c0; --accent:#ffd43b; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin:0; padding:0; height:100%;
+      font-family:"Hiragino Maru Gothic ProN","Yu Gothic UI","Segoe UI",system-ui,sans-serif;
+      background:var(--ui-bg); color:var(--ui-text); overscroll-behavior:none;
+      -webkit-user-select:none; user-select:none; }
+    body { display:flex; flex-direction:column; }
+    header { padding:10px 12px 4px; text-align:center; }
+    h1 { margin:0 0 8px; font-size:1.16rem; letter-spacing:.03em; }
+    .mode-tabs { display:flex; gap:8px; justify-content:center; max-width:560px; margin:0 auto; }
+    .mode-tab { flex:1; padding:9px 6px; border:2px solid transparent; border-radius:16px;
+      background:var(--ui-panel); color:var(--ui-sub); font-size:.92rem; font-weight:700; cursor:pointer; line-height:1.3;
+      transition:transform .08s ease, border-color .15s ease, color .15s ease; }
+    .mode-tab .emoji { font-size:1.28rem; display:block; }
+    .mode-tab:active { transform:scale(.96); }
+    .mode-tab.active { color:var(--ui-text); border-color:var(--accent); background:#232c45; }
+    .stage-wrap { flex:1; position:relative; margin:8px 10px; border-radius:18px; overflow:hidden;
+      box-shadow:0 0 0 2px rgba(255,255,255,.06); touch-action:none; background:#05060d; }
+    #stage { position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+    .ctl-wrap { padding-bottom:calc(2px + env(safe-area-inset-bottom)); }
+    .toolbar { display:flex; gap:7px; justify-content:center; flex-wrap:wrap; padding:6px 10px 0; }
+    .seg-label { color:var(--ui-sub); font-size:.76rem; font-weight:700; align-self:center; margin-right:2px; }
+    .btn { border:none; border-radius:11px; padding:7px 11px; font-size:.82rem; font-weight:700;
+      background:var(--ui-panel); color:var(--ui-text); cursor:pointer; }
+    .btn:active { transform:scale(.95); }
+    .btn.on { background:var(--accent); color:#332a00; }
+    .ctl-row { display:flex; gap:10px; justify-content:center; align-items:center; flex-wrap:wrap; padding:4px 14px 0; }
+    .ctl-row label { color:var(--ui-sub); font-size:.8rem; font-weight:700; white-space:nowrap; }
+    .ctl-row input[type=range] { flex:1; min-width:120px; max-width:240px; accent-color:var(--accent); height:24px; cursor:pointer; }
+    .ctl-row .val { color:var(--accent); font-size:.82rem; font-weight:700; min-width:3.4em; text-align:left; }
+    .tip { text-align:center; color:var(--ui-sub); font-size:.74rem; padding:4px 12px 2px; line-height:1.5; }
+    a.home { color:var(--ui-sub); font-size:.78rem; text-decoration:none; }
+    a.home:active { color:var(--accent); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🪐 たいようけい 3D</h1>
+    <div class="mode-tabs">
+      <button class="mode-tab active" data-mode="top"><span class="emoji">🔭</span>ふかん（上から）</button>
+      <button class="mode-tab" data-mode="follow"><span class="emoji">🎯</span>ついせき</button>
+      <button class="mode-tab" data-mode="free"><span class="emoji">🖐️</span>じゆう</button>
+    </div>
+  </header>
+
+  <div class="stage-wrap">
+    <canvas id="stage"></canvas>
+  </div>
+
+  <div class="ctl-wrap">
+    <div class="toolbar" id="planetBar">
+      <span class="seg-label">ほし</span>
+    </div>
+    <div class="ctl-row">
+      <label for="spd">⏱️ はやさ</label>
+      <input type="range" id="spd" min="0" max="300" value="100" step="2">
+      <span class="val" id="spdV">1.0×</span>
+    </div>
+    <p class="tip" id="tip"></p>
+    <p class="tip"><a class="home" href="../index.html">← ツール いちらんへ</a></p>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" crossorigin="anonymous"></script>
+  <script>
+  (function () {
+    "use strict";
+    if (!window.THREE){ document.getElementById("tip").textContent="3Dライブラリの読み込みに失敗しました（ネット接続を確認してください）"; return; }
+    const canvas = document.getElementById("stage");
+    const wrap = canvas.parentElement;
+    const tipEl = document.getElementById("tip");
+    const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio||1));
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 6000);
+
+    // ---- 手続き的テクスチャ（画像ファイル不要）----
+    function tex(draw){ const c=document.createElement("canvas"); c.width=512; c.height=256;
+      const g=c.getContext("2d"); draw(g,c.width,c.height); const t=new THREE.CanvasTexture(c);
+      t.anisotropy=4; return t; }
+    function shade(hex,f){ const r=(hex>>16)&255,gg=(hex>>8)&255,b=hex&255;
+      const m=(v)=>clamp(Math.round(v*f),0,255); return "rgb("+m(r)+","+m(gg)+","+m(b)+")"; }
+    function bandsTex(base, accent, nb){
+      return tex((g,w,h)=>{ g.fillStyle=shade(base,1); g.fillRect(0,0,w,h);
+        for (let i=0;i<nb;i++){ const y=i/nb*h, hh=h/nb; const f=0.78+0.44*Math.random();
+          g.fillStyle=shade(i%2? base:accent, f);
+          g.beginPath(); for (let x=0;x<=w;x+=16){ const wy=y+Math.sin(x*0.03+i)*3; x?g.lineTo(x,wy):g.moveTo(x,wy); }
+          g.lineTo(w,y+hh); g.lineTo(0,y+hh); g.closePath(); g.fill(); }
+        // つぶつぶ
+        for (let i=0;i<400;i++){ g.fillStyle="rgba(255,255,255,"+(Math.random()*0.05)+")"; g.fillRect(Math.random()*w,Math.random()*h,2,2); }
+      });
+    }
+    function rockyTex(base, spot){
+      return tex((g,w,h)=>{ g.fillStyle=shade(base,1); g.fillRect(0,0,w,h);
+        for (let i=0;i<220;i++){ const r=4+Math.random()*26; g.globalAlpha=0.15+Math.random()*0.25;
+          g.fillStyle=shade(spot, 0.6+Math.random()*0.8);
+          g.beginPath(); g.arc(Math.random()*w,Math.random()*h,r,0,6.3); g.fill(); }
+        g.globalAlpha=1; });
+    }
+    function earthTex(){
+      return tex((g,w,h)=>{ g.fillStyle="#1f5fb0"; g.fillRect(0,0,w,h);
+        g.fillStyle="#2f8f4f"; for (let i=0;i<40;i++){ g.globalAlpha=0.9;
+          const x=Math.random()*w,y=40+Math.random()*(h-80),r=10+Math.random()*34;
+          g.beginPath(); g.arc(x,y,r,0,6.3); g.fill(); }
+        g.globalAlpha=0.9; g.fillStyle="#eef6ff"; g.fillRect(0,0,w,14); g.fillRect(0,h-14,w,14); // 極
+        g.globalAlpha=0.25; g.fillStyle="#ffffff"; for (let i=0;i<30;i++){ g.beginPath();
+          g.arc(Math.random()*w,Math.random()*h,8+Math.random()*20,0,6.3); g.fill(); } // 雲
+        g.globalAlpha=1; });
+    }
+    function sunTex(){
+      return tex((g,w,h)=>{ g.fillStyle="#ffcf3a"; g.fillRect(0,0,w,h);
+        for (let i=0;i<500;i++){ g.globalAlpha=0.3; g.fillStyle=Math.random()<0.5?"#ff9b1a":"#fff0a0";
+          g.beginPath(); g.arc(Math.random()*w,Math.random()*h,2+Math.random()*10,0,6.3); g.fill(); }
+        g.globalAlpha=1; });
+    }
+
+    // ---- 太陽・ライト ----
+    const sun=new THREE.Mesh(new THREE.SphereGeometry(8,48,48),
+      new THREE.MeshBasicMaterial({ map:sunTex() }));
+    scene.add(sun);
+    const glow=new THREE.Mesh(new THREE.SphereGeometry(11,32,32),
+      new THREE.MeshBasicMaterial({ color:0xffcc55, transparent:true, opacity:0.22, side:THREE.BackSide }));
+    sun.add(glow);
+    scene.add(new THREE.PointLight(0xffffff, 2.3, 0, 0.0));
+    scene.add(new THREE.AmbientLight(0x334455, 0.6));
+
+    // ---- 星空 ----
+    (function(){ const n=1800, pos=new Float32Array(n*3);
+      for (let i=0;i<n;i++){ const r=1800+Math.random()*1500, th=Math.random()*6.283, ph=Math.acos(2*Math.random()-1);
+        pos[i*3]=r*Math.sin(ph)*Math.cos(th); pos[i*3+1]=r*Math.cos(ph); pos[i*3+2]=r*Math.sin(ph)*Math.sin(th); }
+      const geo=new THREE.BufferGeometry(); geo.setAttribute("position",new THREE.BufferAttribute(pos,3));
+      scene.add(new THREE.Points(geo, new THREE.PointsMaterial({ color:0xffffff, size:1.6, sizeAttenuation:false }))); })();
+
+    // ---- 惑星 ----
+    function labelSprite(text){
+      const c=document.createElement("canvas"); c.width=256; c.height=64; const g=c.getContext("2d");
+      g.font="bold 36px sans-serif"; g.textAlign="center"; g.textBaseline="middle";
+      g.fillStyle="rgba(0,0,0,.5)"; g.fillText(text,128,34); g.fillStyle="#fff"; g.fillText(text,128,32);
+      const sp=new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(c), depthTest:false, transparent:true }));
+      sp.scale.set(14,3.5,1); return sp;
+    }
+    const DEF=[
+      { jp:"すいせい", size:1.3, dist:15, mat:()=>rockyTex(0x9a8e86,0x5f564f) },
+      { jp:"きんせい", size:2.1, dist:21, mat:()=>rockyTex(0xd9b36b,0xb98a3a) },
+      { jp:"ちきゅう", size:2.3, dist:28, mat:()=>earthTex(), moon:true },
+      { jp:"かせい",  size:1.7, dist:36, mat:()=>rockyTex(0xc1502e,0x7a2d18) },
+      { jp:"もくせい", size:5.2, dist:54, mat:()=>bandsTex(0xd8b48a,0x9c7b53,12), spot:true },
+      { jp:"どせい",  size:4.5, dist:74, mat:()=>bandsTex(0xe3cf9a,0xc3a567,10), ring:true },
+      { jp:"てんのうせい", size:3.2, dist:94, mat:()=>bandsTex(0x9fe0e6,0x6fbcc6,7) },
+      { jp:"かいせい", size:3.1, dist:112, mat:()=>bandsTex(0x4f6fe0,0x3550b0,7) }
+    ];
+    const planets=[], planetsMoon=[];
+    DEF.forEach((d,i)=>{
+      const mesh=new THREE.Mesh(new THREE.SphereGeometry(d.size,40,40),
+        new THREE.MeshStandardMaterial({ map:d.mat(), roughness:1, metalness:0 }));
+      const pivot=new THREE.Object3D(); scene.add(pivot); pivot.add(mesh);
+      mesh.position.x=d.dist;
+      // 自転の傾き・初期角
+      const ang=Math.random()*6.283; pivot.rotation.y=ang;
+      const omega = 73/Math.pow(d.dist,1.5);   // ケプラー（遠いほど遅い）
+      // 木星の大赤斑
+      if (d.spot){ const spot=new THREE.Mesh(new THREE.SphereGeometry(d.size*0.18,16,16),
+        new THREE.MeshStandardMaterial({ color:0xc0492e, roughness:1 }));
+        spot.position.set(d.size*0.95, -d.size*0.25, 0); mesh.add(spot); }
+      // 土星の環
+      if (d.ring){ const rg=new THREE.RingGeometry(d.size*1.4, d.size*2.3, 64);
+        const rt=tex((g,w,h)=>{ for (let x=0;x<w;x++){ const a=0.1+0.5*Math.abs(Math.sin(x*0.15));
+          g.fillStyle="rgba(225,205,150,"+a+")"; g.fillRect(x,0,1,h); } });
+        const rm=new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ map:rt, side:THREE.DoubleSide, transparent:true, opacity:0.85 }));
+        rm.rotation.x=Math.PI*0.5 - 0.46; mesh.add(rm); }
+      // 月
+      if (d.moon){ const mp=new THREE.Object3D(); mesh.add(mp);
+        const moon=new THREE.Mesh(new THREE.SphereGeometry(d.size*0.27,20,20),
+          new THREE.MeshStandardMaterial({ map:rockyTex(0xbdbdbd,0x777777), roughness:1 }));
+        moon.position.x=d.size*2.4; mp.add(moon); planetsMoon.push(mp); }
+      // 軌道リング
+      const seg=128, op=new Float32Array((seg+1)*3);
+      for (let s=0;s<=seg;s++){ op[s*3]=Math.cos(s/seg*6.283)*d.dist; op[s*3+1]=0; op[s*3+2]=Math.sin(s/seg*6.283)*d.dist; }
+      const og=new THREE.BufferGeometry(); og.setAttribute("position",new THREE.BufferAttribute(op,3));
+      scene.add(new THREE.LineLoop(og, new THREE.LineBasicMaterial({ color:0x3a4663, transparent:true, opacity:0.6 })));
+      // ラベル
+      const lab=labelSprite(d.jp); lab.position.y=d.size+2.5; mesh.add(lab);
+      planets.push({ jp:d.jp, mesh, pivot, omega, spin:0.3+Math.random()*0.4, selR:d.size });
+    });
+
+    // ---- カメラ操作 ----
+    const cam={ target:new THREE.Vector3(0,0,0), az:0.6, el:0.95, dist:200 };
+    function applyCam(){
+      const ce=Math.cos(cam.el), se=Math.sin(cam.el);
+      camera.position.set(cam.target.x+cam.dist*ce*Math.sin(cam.az),
+        cam.target.y+cam.dist*se, cam.target.z+cam.dist*ce*Math.cos(cam.az));
+      camera.lookAt(cam.target);
+    }
+    // 入力（1本=回転、2本=ピンチzoom＋パン、ホイール=zoom）
+    const ptrs=new Map(); let pinchD=0, pinchM=null, downPt=null, moved=0;
+    function pos(e){ const r=canvas.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top,id:e.pointerId}; }
+    canvas.addEventListener("pointerdown",(e)=>{ e.preventDefault(); const p=pos(e); ptrs.set(p.id,p);
+      canvas.setPointerCapture(e.pointerId); downPt=p; moved=0;
+      if (ptrs.size===2){ const a=[...ptrs.values()]; pinchD=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y); pinchM={x:(a[0].x+a[1].x)/2,y:(a[0].y+a[1].y)/2}; } });
+    canvas.addEventListener("pointermove",(e)=>{ const p=pos(e); if (!ptrs.has(p.id)) return; const prev=ptrs.get(p.id); ptrs.set(p.id,p);
+      if (ptrs.size===1){ const dx=p.x-prev.x, dy=p.y-prev.y; moved+=Math.abs(dx)+Math.abs(dy);
+        cam.az-=dx*0.006; cam.el=clamp(cam.el+dy*0.006, -1.45, 1.45); }
+      else if (ptrs.size===2){ const a=[...ptrs.values()]; const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);
+        const m={x:(a[0].x+a[1].x)/2,y:(a[0].y+a[1].y)/2};
+        if (pinchD){ cam.dist=clamp(cam.dist*(pinchD/d), 12, 800); }
+        if (pinchM && mode==="free"){ const pan=cam.dist*0.0016;
+          const right=new THREE.Vector3(); camera.getWorldDirection(right); right.cross(camera.up).normalize();
+          const up=camera.up.clone();
+          cam.target.addScaledVector(right, -(m.x-pinchM.x)*pan); cam.target.addScaledVector(up, (m.y-pinchM.y)*pan); }
+        pinchD=d; pinchM=m; } });
+    function upp(e){ const id=e.pointerId;
+      if (ptrs.size===1 && downPt && moved<6){ pick(downPt); }   // タップ＝惑星えらぶ
+      ptrs.delete(id); if (ptrs.size<2){ pinchD=0; pinchM=null; }
+      try{ canvas.releasePointerCapture(id);}catch(_){} }
+    canvas.addEventListener("pointerup",upp);
+    canvas.addEventListener("pointercancel",upp);
+    canvas.addEventListener("wheel",(e)=>{ e.preventDefault(); cam.dist=clamp(cam.dist*(1+e.deltaY*0.0012), 12, 800); }, {passive:false});
+
+    // ---- 惑星えらぶ（クリック / ボタン）----
+    const ray=new THREE.Raycaster(); let selected=2;   // 初期＝ちきゅう
+    function pick(p){ const r=canvas.getBoundingClientRect();
+      const nd=new THREE.Vector2(((p.x)/r.width)*2-1, -((p.y)/r.height)*2+1);
+      ray.setFromCamera(nd, camera);
+      const hits=ray.intersectObjects([sun, ...planets.map(pl=>pl.mesh)], false);
+      if (hits.length){ const o=hits[0].object;
+        if (o===sun){ selectBody(-1); } else { const idx=planets.findIndex(pl=>pl.mesh===o); if (idx>=0) selectBody(idx); } }
+    }
+    function selectBody(i){ selected=i; updPlanetBtns();
+      if (mode==="follow"){ cam.dist=i<0?120:Math.max(8, planets[i].selR*7); } }
+
+    // ---- モード ----
+    let mode="top";
+    function setMode(m){ mode=m;
+      document.querySelectorAll(".mode-tab").forEach(t=>t.classList.toggle("active",t.dataset.mode===m));
+      if (m==="top"){ cam.el=1.45; cam.az=0; cam.dist=220; cam.target.set(0,0,0); }
+      else if (m==="free"){ cam.el=0.6; cam.dist=200; cam.target.set(0,0,0); }
+      else if (m==="follow"){ cam.el=0.35; cam.dist=selected<0?120:Math.max(8,planets[selected].selR*7); }
+      tipEl.textContent=TIPS[m];
+    }
+    const TIPS={
+      top:"上から 太陽系 ぜんたいを 見おろし。ドラッグで まわして、ピンチ／ホイールで ズーム。ほしを タップで えらべる。",
+      follow:"えらんだ ほしを カメラが おいかける。下の ボタンか ほしを タップで きりかえ。ドラッグで まわりを ぐるっと。",
+      free:"ドラッグで 回転、ピンチ／ホイールで ズーム、2本指で 動かす（パン）。自由に 宇宙を たんけん！"
+    };
+    document.querySelectorAll(".mode-tab").forEach(t=>t.addEventListener("click",()=>setMode(t.dataset.mode)));
+
+    // 惑星ボタン
+    const bar=document.getElementById("planetBar");
+    const btns=[];
+    function addBtn(label, idx){ const b=document.createElement("button"); b.className="btn"; b.textContent=label;
+      b.addEventListener("click",()=>{ selectBody(idx); if (mode!=="follow") setMode("follow"); }); bar.appendChild(b); btns.push({b,idx}); }
+    addBtn("☀️たいよう",-1); planets.forEach((p,i)=>addBtn(p.jp,i));
+    function updPlanetBtns(){ btns.forEach(x=>x.b.classList.toggle("on", x.idx===selected)); }
+
+    // 速度
+    const spd=document.getElementById("spd"), spdV=document.getElementById("spdV"); let speedMul=1;
+    function applySpd(){ speedMul=+spd.value/100; spdV.textContent=speedMul.toFixed(1)+"×"; }
+    spd.addEventListener("input",applySpd); applySpd();
+
+    // ---- ループ ----
+    let running=true, lastT=0;
+    function frame(now){ if (!running) return; if (!lastT) lastT=now; let dt=(now-lastT)/1000; lastT=now; if (dt>0.05) dt=0.05;
+      const k=dt*speedMul;
+      for (let i=0;i<planets.length;i++){ const p=planets[i]; p.pivot.rotation.y+=p.omega*k; p.mesh.rotation.y+=p.spin*k*2; }
+      for (const mp of planetsMoon) mp.rotation.y+=k*2.2;
+      sun.rotation.y+=k*0.1;
+      // 追従：ターゲットを 惑星に
+      if (mode==="follow"){ const tg=new THREE.Vector3();
+        if (selected<0) tg.set(0,0,0); else planets[selected].mesh.getWorldPosition(tg);
+        cam.target.lerp(tg, 0.15); }
+      applyCam();
+      renderer.render(scene,camera);
+      requestAnimationFrame(frame);
+    }
+
+    // ---- リサイズ ----
+    function fit(){ const w=wrap.clientWidth, h=wrap.clientHeight;
+      renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+    window.addEventListener("resize", fit);
+    document.addEventListener("visibilitychange",()=>{ running=!document.hidden; if (running){ lastT=0; requestAnimationFrame(frame); } });
+
+    fit(); selectBody(2); setMode("top"); requestAnimationFrame(frame);
+  })();
+
+  if ("serviceWorker" in navigator) { navigator.serviceWorker.register("/service-worker.js").catch(()=>{}); }
+  </script>
+</body>
+</html>

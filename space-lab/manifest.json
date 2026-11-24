@@ -1,0 +1,18 @@
+{
+  "name": "たいようけい 3D",
+  "short_name": "たいようけい",
+  "description": "太陽系の惑星の軌道を3Dで見られる子供向けアプリ。俯瞰・惑星追従・自由閲覧モードで、ズーム・回転してたんけんできる",
+  "start_url": "/space-lab/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#05060d",
+  "theme_color": "#05060d",
+  "icons": [
+    {
+      "src": "../icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
