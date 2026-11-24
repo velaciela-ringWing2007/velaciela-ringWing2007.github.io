@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0b1424">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>ぷかぷか しずむ</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="../icons/icon.svg">
+  <style>
+    :root { --ui-bg:#0b1424; --ui-panel:#1a2435; --ui-text:#eef2fa; --ui-sub:#9fa9c0; --accent:#ffd43b; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin:0; padding:0; height:100%;
+      font-family:"Hiragino Maru Gothic ProN","Yu Gothic UI","Segoe UI",system-ui,sans-serif;
+      background:var(--ui-bg); color:var(--ui-text); overscroll-behavior:none;
+      -webkit-user-select:none; user-select:none; }
+    body { display:flex; flex-direction:column; }
+    header { padding:10px 12px 4px; text-align:center; }
+    h1 { margin:0 0 8px; font-size:1.18rem; letter-spacing:.03em; }
+    .mode-tabs { display:flex; gap:8px; justify-content:center; max-width:560px; margin:0 auto; }
+    .mode-tab { flex:1; padding:9px 6px; border:2px solid transparent; border-radius:16px;
+      background:var(--ui-panel); color:var(--ui-sub); font-size:.95rem; font-weight:700; cursor:pointer; line-height:1.3;
+      transition:transform .08s ease, border-color .15s ease, color .15s ease; }
+    .mode-tab .emoji { font-size:1.3rem; display:block; }
+    .mode-tab:active { transform:scale(.96); }
+    .mode-tab.active { color:var(--ui-text); border-color:var(--accent); background:#263150; }
+    .stage-wrap { flex:1; position:relative; margin:8px 10px; border-radius:18px; overflow:hidden;
+      box-shadow:0 0 0 2px rgba(255,255,255,.06); touch-action:none; }
+    #stage { position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+    .ctl-wrap { padding-bottom:calc(2px + env(safe-area-inset-bottom)); }
+    .toolbar { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; padding:6px 10px 0; }
+    .seg-label { color:var(--ui-sub); font-size:.78rem; font-weight:700; align-self:center; margin-right:2px; }
+    .btn { border:none; border-radius:12px; padding:8px 13px; font-size:.86rem; font-weight:700;
+      background:var(--ui-panel); color:var(--ui-text); cursor:pointer; }
+    .btn:active { transform:scale(.96); }
+    .btn.on { background:var(--accent); color:#332a00; }
+    .tip { text-align:center; color:var(--ui-sub); font-size:.74rem; padding:4px 12px 2px; line-height:1.5; }
+    a.home { color:var(--ui-sub); font-size:.78rem; text-decoration:none; }
+    a.home:active { color:var(--accent); }
+    .hidden { display:none !important; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🛁 ぷかぷか しずむ</h1>
+    <div class="mode-tabs">
+      <button class="mode-tab active" data-mode="tank"><span class="emoji">🌊</span>じっけん すいそう</button>
+      <button class="mode-tab" data-mode="puzzle"><span class="emoji">🎈</span>ふうせん ぱずる</button>
+    </div>
+  </header>
+
+  <div class="stage-wrap">
+    <canvas id="stage"></canvas>
+  </div>
+
+  <div class="ctl-wrap">
+    <!-- じっけん すいそう -->
+    <div id="tank-ctl">
+      <div class="toolbar">
+        <span class="seg-label">えきたい</span>
+        <button class="btn on" id="lWater" data-liq="water">💧 みず</button>
+        <button class="btn" id="lOil" data-liq="oil">🛢️ あぶら</button>
+        <button class="btn" id="lHoney" data-liq="honey">🍯 はちみつ</button>
+        <button class="btn" id="forceBtn">➡️ ちからを みる</button>
+        <button class="btn" id="clearBtn">🧹 ぜんぶ ながす</button>
+      </div>
+      <div class="toolbar">
+        <span class="seg-label">ブロック</span>
+        <button class="btn" data-block="wood">🪵 き</button>
+        <button class="btn" data-block="ice">🧊 こおり</button>
+        <button class="btn" data-block="plastic">🟥 プラ</button>
+        <button class="btn" data-block="iron">⚙️ てつ</button>
+        <button class="btn" data-block="balloon">🎈 ふうせん</button>
+      </div>
+    </div>
+    <!-- ふうせん ぱずる -->
+    <div id="puzzle-ctl" class="hidden">
+      <div class="toolbar">
+        <button class="btn" id="balloonAdd">🎈 ふうせんを ふやす</button>
+        <button class="btn" id="balloonSub">➖ へらす</button>
+        <button class="btn" id="forceBtn2">➡️ ちからを みる</button>
+        <button class="btn" id="resetPuzzle">🔁 さいしょから</button>
+      </div>
+    </div>
+    <p class="tip" id="tip"></p>
+    <p class="tip"><a class="home" href="../index.html">← ツール いちらんへ</a></p>
+  </div>
+
+  <script>
+  (function () {
+    "use strict";
+    const canvas = document.getElementById("stage");
+    const ctx = canvas.getContext("2d", { alpha:false });
+    const tipEl = document.getElementById("tip");
+
+    let W=0, H=0, DPR=1, U=600;
+    const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+
+    const G=680;                         // px/s²
+    let showForces=false, curMode="tank", curLiq="water";
+    const LIQUIDS={
+      water:{ name:"みず", rho:1.0, visc:0.65, fill:"rgba(70,150,255,.34)", top:"rgba(120,195,255,.9)" },
+      oil:{ name:"あぶら", rho:0.8, visc:1.1, fill:"rgba(225,195,80,.38)", top:"rgba(245,220,120,.9)" },
+      honey:{ name:"はちみつ", rho:1.4, visc:3.4, fill:"rgba(220,150,40,.55)", top:"rgba(250,190,70,.95)" }
+    };
+    const BLOCKS={
+      wood:{ label:"🪵", name:"き", rho:0.6, color:"#b5833f", shape:"box" },
+      ice:{ label:"🧊", name:"こおり", rho:0.9, color:"#bfe8ff", shape:"box" },
+      plastic:{ label:"🟥", name:"プラ", rho:1.05, color:"#e05a5a", shape:"box" },
+      iron:{ label:"⚙️", name:"てつ", rho:7.8, color:"#8a93a5", shape:"box" },
+      balloon:{ label:"🎈", name:"ふうせん", rho:0.12, color:"#ff8bc0", shape:"ball" }
+    };
+
+    let objects=[];
+    // 水槽ジオメトリ（描画時に算出）
+    let tank={x:0,y:0,w:0,h:0}, waterY=0;
+    // 水面の波（1D）
+    let surf=null, surfN=0;
+
+    function layout(){
+      tank.x=W*0.10; tank.w=W*0.80; tank.y=H*0.08; tank.h=H*0.84;
+      waterY=tank.y+tank.h*0.30;         // 水面（上から30%）
+      surfN=Math.max(40, Math.round(tank.w/8));
+      surf={ y:new Float32Array(surfN), v:new Float32Array(surfN) };
+      U=Math.min(W,H);
+    }
+    function floorY(){ return tank.y+tank.h; }
+    function surfIdx(x){ return clamp(Math.floor((x-tank.x)/tank.w*surfN),0,surfN-1); }
+    function waterAt(x){ const i=surfIdx(x); return waterY + (surf?surf.y[i]:0); }
+
+    // --- オブジェクト ---
+    function mkObj(type, x, y){
+      const b=BLOCKS[type]; const s=0.075*U;
+      const o={ type, rho:b.rho, color:b.color, label:b.label, name:b.name, shape:b.shape,
+        x, y, vx:0, vy:0, w:s, h:s, r:s*0.55, balloons:0 };
+      return o;
+    }
+    function addBlock(type){
+      const x=tank.x+tank.w*(0.2+Math.random()*0.6);
+      const o=mkObj(type, x, waterY-0.08*tank.h);   // 水面の 少し上から 落とす（すぐ落ち着く）
+      objects.push(o); if (objects.length>14) objects.shift();
+    }
+    // 物体の面積（＝体積）と、水面下の面積
+    function area(o){ return o.shape==="ball" ? Math.PI*o.r*o.r : o.w*o.h; }
+    function subFrac(o){
+      const wy=waterAt(o.x);
+      if (o.shape==="ball"){ const top=o.y-o.r, bot=o.y+o.r;
+        if (bot<=wy) return 0; if (top>=wy) return 1;
+        const d=clamp((bot-wy)/(2*o.r),0,1); return d; }  // 近似（線形）
+      const top=o.y-o.h/2, bot=o.y+o.h/2;
+      if (bot<=wy) return 0; if (top>=wy) return 1;
+      return clamp((bot-wy)/o.h,0,1);
+    }
+
+    function physics(o, dt){
+      if (o===drag.obj) return;
+      const liq=LIQUIDS[curLiq];
+      const frac=subFrac(o);
+      // a = g*(1 - ρ流体*浸水率 / ρ物体)   （サイズに依存しない）
+      const a=G*(1 - liq.rho*frac/o.rho);
+      o.vy += a*dt;
+      const damp = frac>0 ? (1 - liq.visc*dt) : (1 - 0.3*dt);
+      o.vy *= clamp(damp,0,1);
+      o.vy = clamp(o.vy, -520, 520);
+      o.y += o.vy*dt;
+      o.vx *= 0.9; o.x += o.vx*dt;
+      // 水面をゆらす（浸水境界を またいで 動くとき・やさしく）
+      if (frac>0 && frac<1 && Math.abs(o.vy)>8){ const k=o.shape==="ball"?o.r:o.w/2;
+        const i0=surfIdx(o.x-k), i1=surfIdx(o.x+k); const push=clamp(o.vy*0.045,-6,6);
+        for (let j=i0;j<=i1;j++) surf.v[j]+=push; }
+      // 壁・床・天井
+      const half=o.shape==="ball"?o.r:o.h/2, hw=o.shape==="ball"?o.r:o.w/2;
+      if (o.y+half>floorY()){ o.y=floorY()-half; if (o.vy>0){ o.vy*=-0.2; } }
+      if (o.y-half<tank.y){ o.y=tank.y+half; if (o.vy<0) o.vy=0; }
+      if (o.x-hw<tank.x){ o.x=tank.x+hw; o.vx=Math.abs(o.vx)*0.3; }
+      if (o.x+hw>tank.x+tank.w){ o.x=tank.x+tank.w-hw; o.vx=-Math.abs(o.vx)*0.3; }
+    }
+
+    function stepSurface(){
+      if (!surf) return; const y=surf.y, v=surf.v, n=surfN;
+      for (let i=0;i<n;i++){ const l=y[i>0?i-1:0], r=y[i<n-1?i+1:n-1];
+        v[i]+=(l+r-2*y[i])*0.16; v[i]*=0.94; }
+      for (let i=0;i<n;i++){ y[i]+=v[i]; y[i]*=0.985; y[i]=clamp(y[i],-26,26); }
+    }
+
+    // --- ふうせん ぱずる ---
+    let puzzle=null;
+    function initPuzzle(){
+      const s=0.085*U;
+      puzzle={ type:"iron", shape:"box", x:tank.x+tank.w*0.5, y:tank.y+tank.h*0.45,
+        vx:0, vy:0, w:s, h:s, r:0, color:"#8a93a5", label:"⚙️", name:"てつ", balloons:3, rho:7.8 };
+      recalcPuzzle();
+    }
+    function recalcPuzzle(){
+      // 平均密度 = (鉄の質量 + ふうせん×質量) / (鉄の体積 + ふうせん×体積)
+      const Ai=puzzle.w*puzzle.h, rb=0.05*U, Ab=Math.PI*rb*rb;
+      const n=puzzle.balloons;
+      const mass=7.8*Ai + n*0.12*Ab, vol=Ai + n*Ab;
+      puzzle.rho=mass/vol; puzzle.rb=rb;
+      // 当たり判定サイズ（鉄＋ふうせんの広がり）を 近似
+      puzzle.w2=Math.max(puzzle.w, rb*2);
+    }
+
+    // --- 描画 ---
+    function arrow(x,y,dx,dy,color){
+      const l=Math.hypot(dx,dy); if (l<3) return; const ux=dx/l, uy=dy/l;
+      ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=3; ctx.lineCap="round";
+      ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+dx,y+dy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+dx,y+dy);
+      ctx.lineTo(x+dx-ux*11+uy*6, y+dy-uy*11-ux*6);
+      ctx.lineTo(x+dx-ux*11-uy*6, y+dy-uy*11+ux*6); ctx.closePath(); ctx.fill();
+    }
+    function drawForces(o){
+      const liq=LIQUIDS[curLiq]; const frac=subFrac(o);
+      const fg=clamp(o.rho*18, 22, 150), fb=clamp(liq.rho*frac*18, 0, 150);
+      const off=(o.shape==="ball"?o.r:o.h/2)+4;
+      arrow(o.x+9, o.y+off, 0, fg, "#ff5d5d");       // 重力（下）
+      if (fb>4) arrow(o.x-9, o.y-off, 0, -fb, "#5aa6ff");  // 浮力（上）
+    }
+    function drawBox(o){
+      ctx.save(); const hw=o.w/2, hh=o.h/2;
+      ctx.fillStyle=o.color; ctx.strokeStyle="rgba(255,255,255,.35)"; ctx.lineWidth=2;
+      ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(o.x-hw,o.y-hh,o.w,o.h,7); else ctx.rect(o.x-hw,o.y-hh,o.w,o.h);
+      ctx.fill(); ctx.stroke();
+      ctx.font=Math.round(o.h*0.5)+"px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText(o.label, o.x, o.y-o.h*0.08);
+      ctx.fillStyle="rgba(0,0,0,.6)"; ctx.font="bold "+Math.round(o.h*0.2)+"px sans-serif";
+      ctx.fillText(o.rho.toFixed(2), o.x, o.y+o.h*0.30);
+      ctx.restore(); ctx.textBaseline="alphabetic";
+    }
+    function drawBall(o){
+      const g=ctx.createRadialGradient(o.x-o.r*0.3,o.y-o.r*0.35,o.r*0.2,o.x,o.y,o.r);
+      g.addColorStop(0,"#ffffff"); g.addColorStop(0.3,o.color); g.addColorStop(1,"#c84f8f");
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(o.x,o.y,o.r,0,Math.PI*2); ctx.fill();
+      ctx.font=Math.round(o.r*1.0)+"px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText("🎈", o.x, o.y); ctx.textBaseline="alphabetic";
+    }
+    function drawObj(o){ if (o.shape==="ball") drawBall(o); else drawBox(o); }
+
+    function drawPuzzle(){
+      const o=puzzle;
+      // ふうせん（上に ひもで つながる）
+      const rb=o.rb, n=o.balloons;
+      for (let i=0;i<n;i++){
+        const ang=(i-(n-1)/2)*0.5; const bx=o.x+Math.sin(ang)*o.w*0.9;
+        const by=o.y-o.h*0.6 - rb - Math.cos(ang)*rb*1.3 - (i%2)*rb*0.5;
+        ctx.strokeStyle="rgba(255,255,255,.4)"; ctx.lineWidth=1.5;
+        ctx.beginPath(); ctx.moveTo(o.x, o.y-o.h*0.4); ctx.lineTo(bx,by+rb); ctx.stroke();
+        const g=ctx.createRadialGradient(bx-rb*0.3,by-rb*0.35,rb*0.2,bx,by,rb);
+        g.addColorStop(0,"#fff"); g.addColorStop(0.3,"#ff8bc0"); g.addColorStop(1,"#c84f8f");
+        ctx.fillStyle=g; ctx.beginPath(); ctx.arc(bx,by,rb,0,Math.PI*2); ctx.fill();
+      }
+      drawBox(o);
+      // 平均密度＆判定
+      ctx.fillStyle="rgba(255,255,255,.85)"; ctx.font="bold 15px sans-serif"; ctx.textAlign="center";
+      ctx.fillText("へいきん みつど: "+o.rho.toFixed(2)+"（みず=1.00）", W/2, tank.y-6>14?tank.y-6:20);
+      const diff=Math.abs(o.rho-1.0);
+      const subOK=(o.y-o.h/2)>waterY-2, floorOK=(o.y+o.h/2)<floorY()-6;  // 水中に 浮いている（床・水面に ついていない）
+      if (diff<0.07 && subOK && floorOK){
+        ctx.fillStyle="#7dff9b"; ctx.font="bold 20px sans-serif";
+        ctx.fillText("✨ ちょうど つりあった！ちゅうせい ふりょく！", W/2, tank.y+tank.h*0.18);
+      }
+      if (showForces) drawForces(o);
+    }
+
+    function draw(){
+      ctx.fillStyle="#0b1424"; ctx.fillRect(0,0,W,H);
+      // 水槽ガラス
+      ctx.fillStyle="rgba(255,255,255,.03)"; ctx.fillRect(tank.x,tank.y,tank.w,tank.h);
+      // 液体（波打つ水面まで 塗る）
+      const liq=LIQUIDS[curLiq];
+      ctx.beginPath(); ctx.moveTo(tank.x, floorY());
+      for (let i=0;i<surfN;i++){ const x=tank.x+(i+0.5)/surfN*tank.w; ctx.lineTo(x, waterY+surf.y[i]); }
+      ctx.lineTo(tank.x+tank.w, floorY()); ctx.closePath();
+      ctx.fillStyle=liq.fill; ctx.fill();
+      // 水面ライン
+      ctx.strokeStyle=liq.top; ctx.lineWidth=2.5; ctx.beginPath();
+      for (let i=0;i<surfN;i++){ const x=tank.x+(i+0.5)/surfN*tank.w; const y=waterY+surf.y[i]; i?ctx.lineTo(x,y):ctx.moveTo(x,y); }
+      ctx.stroke();
+      // 物体
+      if (curMode==="tank"){
+        for (const o of objects){ drawObj(o); if (showForces) drawForces(o); }
+      } else { drawPuzzle(); }
+      // 水槽わく
+      ctx.strokeStyle="rgba(180,210,255,.5)"; ctx.lineWidth=3;
+      ctx.strokeRect(tank.x,tank.y,tank.w,tank.h);
+      // ラベル
+      ctx.fillStyle="rgba(255,255,255,.55)"; ctx.font="bold 12px sans-serif"; ctx.textAlign="left";
+      ctx.fillText("えきたい: "+liq.name+"（みつど "+liq.rho.toFixed(1)+"）　みつど<えきたい→うく／>→しずむ", 12, 22);
+    }
+
+    // --- ループ ---
+    let running=true, lastT=0;
+    function frame(now){ if (!running) return;
+      if (!lastT) lastT=now; let dt=(now-lastT)/1000; lastT=now; if (dt>0.05) dt=0.05;
+      if (curMode==="tank"){ for (const o of objects) physics(o, dt); }
+      else { physics(puzzle, dt); }
+      stepSurface();
+      draw();
+      requestAnimationFrame(frame);
+    }
+
+    // --- リサイズ ---
+    function fitCanvas(){
+      const rect=canvas.getBoundingClientRect();
+      W=rect.width; H=rect.height; DPR=Math.min(2, window.devicePixelRatio||1);
+      canvas.width=Math.round(W*DPR); canvas.height=Math.round(H*DPR);
+      ctx.setTransform(DPR,0,0,DPR,0,0); layout();
+      if (puzzle) initPuzzle();
+    }
+
+    // --- 入力（物体ドラッグ）---
+    const drag={obj:null, dx:0, dy:0, lx:0, ly:0, lt:0, vy:0, vx:0};
+    function pos(e){ const r=canvas.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
+    function hit(p){
+      if (curMode==="puzzle"){ const o=puzzle; if (Math.abs(p.x-o.x)<o.w && Math.abs(p.y-o.y)<o.h) return o; return null; }
+      for (let i=objects.length-1;i>=0;i--){ const o=objects[i];
+        if (o.shape==="ball"){ if (Math.hypot(p.x-o.x,p.y-o.y)<o.r+6) return o; }
+        else if (Math.abs(p.x-o.x)<o.w/2+6 && Math.abs(p.y-o.y)<o.h/2+6) return o; }
+      return null;
+    }
+    canvas.addEventListener("pointerdown",(e)=>{ e.preventDefault(); const p=pos(e); const o=hit(p);
+      if (o){ drag.obj=o; drag.dx=o.x-p.x; drag.dy=o.y-p.y; drag.lx=p.x; drag.ly=p.y; drag.lt=performance.now(); drag.vx=0; drag.vy=0;
+        canvas.setPointerCapture(e.pointerId); } });
+    canvas.addEventListener("pointermove",(e)=>{ if (!drag.obj) return; const p=pos(e);
+      const now=performance.now(), d=(now-drag.lt)/1000||0.016;
+      drag.vx=(p.x-drag.lx)/d; drag.vy=(p.y-drag.ly)/d; drag.lx=p.x; drag.ly=p.y; drag.lt=now;
+      drag.obj.x=clamp(p.x+drag.dx, tank.x, tank.x+tank.w); drag.obj.y=clamp(p.y+drag.dy, tank.y, floorY());
+      drag.obj.vy=0; drag.obj.vx=0; });
+    function release(e){ if (!drag.obj) return;
+      drag.obj.vx=clamp(drag.vx,-400,400); drag.obj.vy=clamp(drag.vy,-400,400); drag.obj=null;
+      try{ canvas.releasePointerCapture(e.pointerId);}catch(_){} }
+    canvas.addEventListener("pointerup",release);
+    canvas.addEventListener("pointercancel",release);
+
+    // --- UI ---
+    const TIPS={
+      tank:"したの ボタンで ブロックを 入れて、ぷかぷか／しずむ を みよう。えきたいを「はちみつ」にすると おもい プラが うき上がる！ ブロックは ゆびで うごかせる。",
+      puzzle:"てつの オモリに ふうせんを つけて へいきん みつどを 1.0（みず）に 近づけ、まん中で ぴたっと 止まる「ちゅうせい ふりょく」を つくろう！"
+    };
+    function setTip(){ tipEl.textContent=TIPS[curMode]; }
+    function applyMode(){
+      document.getElementById("tank-ctl").classList.toggle("hidden", curMode!=="tank");
+      document.getElementById("puzzle-ctl").classList.toggle("hidden", curMode!=="puzzle");
+      document.querySelectorAll(".mode-tab").forEach(t=>t.classList.toggle("active", t.dataset.mode===curMode));
+      if (curMode==="puzzle" && !puzzle) initPuzzle();
+      setTip();
+    }
+    document.querySelectorAll(".mode-tab").forEach(tab=>tab.addEventListener("click",()=>{
+      if (curMode===tab.dataset.mode) return; curMode=tab.dataset.mode;
+      if (curMode==="puzzle"){ curLiq="water"; document.querySelectorAll("[data-liq]").forEach(b=>b.classList.toggle("on",b.dataset.liq==="water")); initPuzzle(); }
+      applyMode();
+    }));
+    document.querySelectorAll("[data-liq]").forEach(b=>b.addEventListener("click",()=>{
+      curLiq=b.dataset.liq; document.querySelectorAll("[data-liq]").forEach(x=>x.classList.toggle("on",x===b)); }));
+    document.querySelectorAll("[data-block]").forEach(b=>b.addEventListener("click",()=>addBlock(b.dataset.block)));
+    function toggleForce(e){ showForces=!showForces;
+      document.getElementById("forceBtn").classList.toggle("on",showForces);
+      document.getElementById("forceBtn2").classList.toggle("on",showForces); }
+    document.getElementById("forceBtn").addEventListener("click",toggleForce);
+    document.getElementById("forceBtn2").addEventListener("click",toggleForce);
+    document.getElementById("clearBtn").addEventListener("click",()=>{ objects=[]; });
+    document.getElementById("balloonAdd").addEventListener("click",()=>{ if (puzzle.balloons<14){ puzzle.balloons++; recalcPuzzle(); } });
+    document.getElementById("balloonSub").addEventListener("click",()=>{ if (puzzle.balloons>0){ puzzle.balloons--; recalcPuzzle(); } });
+    document.getElementById("resetPuzzle").addEventListener("click",()=>{ initPuzzle(); });
+
+    document.addEventListener("visibilitychange",()=>{ running=!document.hidden; if (running){ lastT=0; requestAnimationFrame(frame); } });
+    window.addEventListener("resize", fitCanvas);
+    window.addEventListener("load",()=>{ fitCanvas(); applyMode(); });
+
+    fitCanvas();
+    // 最初に いくつか ブロックを 入れておく
+    addBlock("wood"); addBlock("iron"); addBlock("ice"); addBlock("balloon");
+    applyMode(); requestAnimationFrame(frame);
+  })();
+
+  if ("serviceWorker" in navigator) { navigator.serviceWorker.register("/service-worker.js").catch(()=>{}); }
+  </script>
+</body>
+</html>

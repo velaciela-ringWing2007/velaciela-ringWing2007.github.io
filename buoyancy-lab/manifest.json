@@ -1,0 +1,18 @@
+{
+  "name": "ぷかぷか しずむ",
+  "short_name": "ぷかぷか",
+  "description": "浮力・密度・アルキメデスの原理を遊びながら学べる子供向けアプリ。水・油・はちみつに木や鉄や風船を入れて、浮く・沈むを体験できる",
+  "start_url": "/buoyancy-lab/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b1424",
+  "theme_color": "#0b1424",
+  "icons": [
+    {
+      "src": "../icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
